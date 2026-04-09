@@ -1,0 +1,247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'katex/dist/katex.min.css';
+
+.markdown-body {
+  @apply text-slate-800 dark:text-slate-200 text-[14px] leading-relaxed break-words;
+}
+.markdown-body p { margin-bottom: 0.85em; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3 { 
+  @apply font-bold mt-5 mb-3 text-slate-900 dark:text-white font-outfit tracking-tight flex items-center gap-2; 
+}
+.markdown-body ul { @apply list-disc pl-5 mb-4 space-y-1.5; }
+.markdown-body ol { @apply list-decimal pl-5 mb-4 space-y-1.5; }
+.markdown-body li { @apply text-slate-700 dark:text-slate-300; }
+.markdown-body strong { @apply font-bold text-slate-900 dark:text-white; }
+.markdown-body a { @apply text-brand-500 hover:text-brand-600 font-medium underline underline-offset-2 transition-colors; }
+
+/* ── Rich Custom Elements ─────────────────────────────────────── */
+.markdown-body blockquote { 
+  @apply border-l-[3px] border-brand-500 pl-4 py-2 my-4 italic bg-slate-50 dark:bg-white/[0.02] text-slate-700 dark:text-slate-300 rounded-r-xl shadow-sm text-[13.5px]; 
+}
+.markdown-body hr {
+  @apply my-6 border-t-2 border-slate-100 dark:border-white/[0.06] border-dashed;
+}
+
+/* ── Stunning Table Styling ─────────────────────────────────────── */
+.markdown-body table {
+  @apply w-full text-left border-collapse my-5 bg-white dark:bg-[#0b101a] rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/[0.08];
+}
+.markdown-body th {
+  @apply bg-slate-50 dark:bg-white/[0.02] px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-white/[0.08];
+}
+.markdown-body td {
+  @apply px-4 py-3.5 text-sm text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-white/[0.03];
+}
+.markdown-body tr:last-child td {
+  @apply border-b-0;
+}
+.markdown-body tr {
+  @apply hover:bg-slate-50/50 dark:hover:bg-white/[0.01] transition-colors duration-150;
+}
+
+.markdown-body pre { @apply bg-transparent p-0 m-0 overflow-visible; }
+.markdown-body .katex-display { @apply overflow-x-auto py-2 my-2 w-full flex items-center justify-center; }
+
+@layer base {
+  body {
+    @apply bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen relative font-sans antialiased selection:bg-brand-500/20;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* ── Clean Scrollbar ─────────────────────────────────────────── */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  }
+  .dark * {
+    scrollbar-color: rgba(71, 85, 105, 0.6) transparent;
+  }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+  }
+}
+
+@layer components {
+  /* ── Refined Bento Card ─────────────────────────────────────────── */
+  .glass-card {
+    @apply bg-white dark:bg-[#090e1a] backdrop-blur-xl border border-slate-200 dark:border-white/[0.06] rounded-xl shadow-bento;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .glass-card:hover {
+    @apply border-slate-300 dark:border-white/[0.1] shadow-bento-hover;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2 rounded-lg
+           transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center gap-2 text-sm shadow-sm;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700
+           text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.04]
+           font-medium px-4 py-2 rounded-lg transition-all duration-150 active:scale-[0.98]
+           flex items-center gap-2 text-sm;
+  }
+
+   .btn-ghost {
+    @apply hover:bg-slate-100 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400
+           px-2.5 py-1.5 rounded-lg transition-all duration-150 flex items-center gap-1.5 text-sm;
+  }
+  .btn-ghost:hover {
+    @apply text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-white/10;
+  }
+
+  .btn-danger {
+    @apply bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20
+           text-red-600 dark:text-red-400 font-medium px-3 py-1.5 rounded-lg
+           transition-colors duration-150;
+  }
+
+  /* ── Inputs ─────────────────────────────────────────────────────── */
+  .input-field {
+    @apply bg-slate-50 dark:bg-[#0f1522] border border-slate-200 dark:border-white/[0.08]
+           rounded-lg px-3 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400
+           transition-all duration-150 w-full text-sm shadow-sm font-medium;
+  }
+  .input-field:focus {
+    @apply outline-none border-brand-500 ring-1 ring-brand-500 bg-white dark:bg-[#131b2c];
+  }
+
+  .label {
+    @apply block text-xs font-bold text-slate-700 dark:text-slate-400 mb-1.5 tracking-wide;
+  }
+
+  /* ── Section Title ──────────────────────────────────────────────── */
+  .section-title {
+    @apply text-base font-bold font-outfit text-slate-900 dark:text-slate-100 tracking-tight;
+  }
+
+  /* ── Table ──────────────────────────────────────────────────────── */
+  .table-th {
+    @apply px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 dark:text-slate-400
+           uppercase tracking-wider whitespace-nowrap select-none cursor-pointer
+           hover:text-slate-900 dark:hover:text-slate-200 transition-colors border-b border-slate-200 dark:border-white/[0.06];
+  }
+  .table-td {
+    @apply px-4 py-3 text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap border-b border-slate-100 dark:border-white/[0.02];
+  }
+  .table-row {
+    @apply hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors duration-150;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium tracking-wide;
+  }
+
+  /* ── Chips ──────────────────────────────────────────────────────── */
+  .chip-active {
+    @apply bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 font-semibold border-slate-800 dark:border-slate-200 shadow-sm;
+  }
+  .chip-inactive {
+    @apply bg-slate-50 dark:bg-white/[0.02] text-slate-700 dark:text-slate-400
+           border border-slate-200 dark:border-white/[0.08] hover:border-slate-300 dark:hover:border-white/[0.15];
+  }
+
+  /* ── Modal ──────────────────────────────────────────────────────── */
+  .modal-overlay {
+    @apply fixed inset-0 z-[200] flex items-center justify-center p-4;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: fade-in 0.15s ease-out;
+  }
+  .modal-box {
+    @apply w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-xl bg-white dark:bg-[#0b101a] border border-slate-200 dark:border-white/[0.08] shadow-2xl;
+    box-shadow: 0 20px 40px -8px rgba(0,0,0,0.2);
+    animation: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  /* ── Kanban Board ──────────────────────────────────────────────── */
+  .kanban-board {
+    @apply flex gap-6 overflow-x-auto pb-6;
+    @apply snap-x snap-mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.1) transparent;
+  }
+  .dark .kanban-board {
+    scrollbar-color: rgba(255,255,255,0.05) transparent;
+  }
+
+  .kanban-board::-webkit-scrollbar {
+    height: 6px;
+  }
+  .kanban-board::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .kanban-board::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.1);
+    border-radius: 10px;
+  }
+  .dark .kanban-board::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.05);
+  }
+  .kanban-col {
+    @apply flex flex-col gap-4 min-w-[280px] w-[280px] shrink-0 snap-center;
+  }
+  
+  @media (max-width: 768px) {
+    .kanban-board {
+      @apply flex-col overflow-x-visible snap-none;
+    }
+    .kanban-col {
+      @apply w-full min-w-0;
+    }
+  }
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes float {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.8; }
+  90% { opacity: 0.8; }
+  100% { transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)); opacity: 0; }
+}
+
+.animate-float {
+  animation: float var(--float-duration, 20s) linear infinite;
+  animation-delay: var(--float-delay, 0s);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out forwards;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee var(--duration, 30s) linear infinite;
+}
+
+/* ── Placement Gradients ─────────────────────────────────────────── */
+.bg-placement-gradient {
+  background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent),
+              radial-gradient(circle at bottom left, rgba(79, 70, 229, 0.08), transparent);
+}
+
+.dark .bg-placement-gradient {
+  background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.05), transparent),
+              radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.05), transparent);
+}

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build output
+dist/
+client/dist/
+
+# Environment variables
+.env
+.env.*
+client/.env
+client/.env.*
+server/.env
+server/.env.*
+!client/.env.example
+!server/.env.example
+
+# Deployment and uploads
+.vercel/
+server/public/uploads/
+
+# IDE and system files
+.vscode/
+.idea/
+.DS_Store
+*.log
