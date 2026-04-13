@@ -142,6 +142,10 @@ async function fetchCodeChefContests() {
   }
 }
 
+let cachedContests = null;
+let lastContestFetchTime = 0;
+const CONTEST_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 // @route   GET /api/platforms/contests
 router.get('/contests', auth, async (req, res) => {
   try {
@@ -153,31 +157,36 @@ router.get('/contests', auth, async (req, res) => {
     // Show contests starting within the next 48 hours
     const windowEndTime = nowTime + (48 * 60 * 60 * 1000);
 
-    // Fetch from LeetCode, Codeforces, and CodeChef in parallel
-    const [leetcode, codeforces, codechef] = await Promise.all([
-      fetchLeetCodeContests(),
-      fetchCodeforcesContests(),
-      fetchCodeChefContests()
-    ]);
+    if (!cachedContests || nowTime - lastContestFetchTime > CONTEST_CACHE_TTL) {
+      // Fetch from LeetCode, Codeforces, and CodeChef in parallel
+      const [leetcode, codeforces, codechef] = await Promise.all([
+        fetchLeetCodeContests(),
+        fetchCodeforcesContests(),
+        fetchCodeChefContests()
+      ]);
 
-    // Merge and deduplicate by platform+name
-    const seen = new Set();
-    const merged = [];
-    for (const c of [...leetcode, ...codeforces, ...codechef]) {
-      const dedupKey = `${c.platform}|${c.name}`;
-      if (!seen.has(dedupKey)) {
-        seen.add(dedupKey);
-        merged.push(c);
+      // Merge and deduplicate by platform+name
+      const seen = new Set();
+      const merged = [];
+      for (const c of [...leetcode, ...codeforces, ...codechef]) {
+        const dedupKey = `${c.platform}|${c.name}`;
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          merged.push(c);
+        }
       }
+      
+      cachedContests = merged;
+      lastContestFetchTime = nowTime;
+      console.log(`[Cache Updated] Fetched Contests (LC=${leetcode.length}, CF=${codeforces.length}, CC=${codechef.length})`);
     }
 
-    const filtered = merged.filter(c => {
+    const filtered = cachedContests.filter(c => {
       const isUpcoming = c.startTime > nowTime && c.startTime <= windowEndTime;
       const isDismissed = dismissed.includes(c.id);
       return isUpcoming && !isDismissed;
     });
 
-    console.log(`Returning ${filtered.length} contests (LC=${leetcode.length}, CF=${codeforces.length}, CC=${codechef.length})`);
     return res.json(filtered.sort((a, b) => a.startTime - b.startTime));
   } catch (err) {
     console.error('Contest route error:', err);

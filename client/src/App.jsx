@@ -40,7 +40,7 @@ export default function App() {
     // Artificial delay to ensure the beautiful logo animation plays out
     const timer = setTimeout(() => {
       setIsInitializing(false);
-    }, 1800);
+    }, 400);
     return () => clearTimeout(timer);
   }, []);
 

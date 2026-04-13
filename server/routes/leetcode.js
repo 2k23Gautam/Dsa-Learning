@@ -44,6 +44,7 @@ router.get('/stats/:username', auth, async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'Referer': 'https://leetcode.com',
+        'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify({
         query: query,
@@ -85,6 +86,7 @@ router.get('/recent/:username', auth, async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'Referer': 'https://leetcode.com',
+        'User-Agent': 'Mozilla/5.0',
       },
       body: JSON.stringify({
         query: query,
