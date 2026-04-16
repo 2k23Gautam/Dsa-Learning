@@ -3,7 +3,7 @@ import { X, LayoutDashboard, List, User, Users, Trello,
   LogOut,
   UserCircle,
   UserPlus,
-  AlertTriangle, Zap, CalendarDays, Sun, Moon,
+  AlertTriangle, Zap, CalendarDays, Sun, Moon, Building2,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { buildAssetUrl, useStore } from '../store/StoreContext.jsx';
@@ -17,6 +17,7 @@ const NAV = [
   { to: '/revision',  icon: AlertTriangle,   label: 'Revision' },
   { to: '/today',     icon: Zap,             label: "Today's DSA" },
   { to: '/calendar',  icon: CalendarDays,    label: 'Calendar' },
+  { to: '/company',   icon: Building2,       label: 'Companies' },
   { to: '/community', icon: Users,           label: 'Social Hub' },
 ];
 

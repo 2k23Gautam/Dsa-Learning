@@ -82,12 +82,14 @@ const probRoutes = require(path.resolve(__dirname, 'routes/problems'));
 const userBaseRoutes = require(path.resolve(__dirname, 'routes/users'));
 const platformRoutes = require(path.resolve(__dirname, 'routes/platforms'));
 const leetcodeRoutes = require(path.resolve(__dirname, 'routes/leetcode'));
+const companyRoutes = require(path.resolve(__dirname, 'routes/company'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/problems', probRoutes);
 app.use('/api/users', userBaseRoutes);
 app.use('/api/platforms', platformRoutes);
 app.use('/api/leetcode', leetcodeRoutes);
+app.use('/api/company', companyRoutes);
 
 // Fix Static Uploads
 app.use('/uploads', express.static(path.resolve(__dirname, 'public/uploads')));

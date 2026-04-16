@@ -15,6 +15,7 @@ import SolvedCalendar from './pages/SolvedCalendar.jsx';
 import Community from './pages/Community.jsx';
 import Profile from './pages/Profile.jsx';
 import FriendProfile from './pages/FriendProfile.jsx';
+import CompanyProblems from './pages/CompanyProblems.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="revision"  element={<NeedsRevision />} />
           <Route path="today"     element={<TodayDSA />} />
           <Route path="calendar"  element={<SolvedCalendar />} />
+          <Route path="company"   element={<CompanyProblems />} />
           <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/profile/:id" element={<ProtectedRoute><FriendProfile /></ProtectedRoute>} />
