@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Globe } from 'lucide-react';
+import { API_BASE_URL } from '../store/StoreContext';
 
 export default function CodeforcesCard({ handle }) {
   const [data, setData] = useState(null);
@@ -11,12 +12,17 @@ export default function CodeforcesCard({ handle }) {
       return;
     }
     
-    // Fetch live Codeforces rank and rating directly from their public API
-    fetch(`https://codeforces.com/api/user.info?handles=${handle}`)
+    // Fetch live Codeforces rank and rating via backend proxy
+    const token = localStorage.getItem('dsa_token');
+    fetch(`${API_BASE_URL}/api/codeforces/stats/${handle}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    })
       .then(res => res.json())
       .then(json => {
-        if (json.status === 'OK' && json.result.length > 0) {
-          setData(json.result[0]);
+        if (json && !json.message) {
+          setData(json);
         }
       })
       .catch(e => console.error('CF Fetch Error:', e))

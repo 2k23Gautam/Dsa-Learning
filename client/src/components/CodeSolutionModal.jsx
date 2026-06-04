@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Copy, Check, Code2, Edit2 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function CodeSolutionModal({ open, onClose, problem, onEdit }) {
   const [copied, setCopied] = useState(false);
@@ -22,8 +23,6 @@ export default function CodeSolutionModal({ open, onClose, problem, onEdit }) {
     }
   };
 
-  if (!open) return null;
-
   const linesCount = code ? code.split('\n').length : 0;
 
   // Determine language intuitively (basic fallback)
@@ -34,12 +33,21 @@ export default function CodeSolutionModal({ open, onClose, problem, onEdit }) {
   else if (codeLower.includes('def ') || codeLower.includes('print(')) language = 'python';
 
   return (
-    <div className="modal-overlay z-[110] bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-4xl mx-auto my-6 rounded-2xl overflow-hidden shadow-2xl flex flex-col bg-[#1e1e1e] border border-[#3c3c3c]"
-        style={{ maxHeight: '85vh' }}
-        onClick={e => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {open && (
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="modal-overlay z-[110] bg-black/60 backdrop-blur-sm" onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="w-full max-w-4xl mx-auto my-6 rounded-2xl overflow-hidden shadow-2xl flex flex-col bg-[#1e1e1e] border border-[#3c3c3c]"
+            style={{ maxHeight: '85vh' }}
+            onClick={e => e.stopPropagation()}
+          >
         {/* Title bar — VS Code style */}
         <div
           style={{ background: '#1e1e1e', borderBottom: '1px solid #3c3c3c' }}
@@ -184,7 +192,9 @@ export default function CodeSolutionModal({ open, onClose, problem, onEdit }) {
            </button>
         </div>
 
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

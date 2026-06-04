@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { Toaster } from 'react-hot-toast';
 import { AnimatePresence } from 'framer-motion';
 import { useAuth } from './store/AuthContext.jsx';
-import SplashScreen from './components/SplashScreen.jsx';
 import AppLayout from './layouts/AppLayout.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AllProblems from './pages/AllProblems.jsx';
@@ -35,21 +34,8 @@ function PublicRoutes() {
 }
 
 export default function App() {
-  const [isInitializing, setIsInitializing] = useState(true);
-
-  useEffect(() => {
-    // Artificial delay to ensure the beautiful logo animation plays out
-    const timer = setTimeout(() => {
-      setIsInitializing(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
     <>
-      <AnimatePresence mode="wait">
-        {isInitializing && <SplashScreen />}
-      </AnimatePresence>
       <BrowserRouter>
       <Toaster
         position="top-right"

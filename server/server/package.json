@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "dsa-tracker-server": "file:.."
+  }
+}

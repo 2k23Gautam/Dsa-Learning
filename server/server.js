@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const cron = require('node-cron');
 
 const app = express();
 
@@ -82,6 +83,7 @@ const probRoutes = require(path.resolve(__dirname, 'routes/problems'));
 const userBaseRoutes = require(path.resolve(__dirname, 'routes/users'));
 const platformRoutes = require(path.resolve(__dirname, 'routes/platforms'));
 const leetcodeRoutes = require(path.resolve(__dirname, 'routes/leetcode'));
+const codeforcesRoutes = require(path.resolve(__dirname, 'routes/codeforces'));
 const companyRoutes = require(path.resolve(__dirname, 'routes/company'));
 
 app.use('/api/auth', authRoutes);
@@ -89,6 +91,7 @@ app.use('/api/problems', probRoutes);
 app.use('/api/users', userBaseRoutes);
 app.use('/api/platforms', platformRoutes);
 app.use('/api/leetcode', leetcodeRoutes);
+app.use('/api/codeforces', codeforcesRoutes);
 app.use('/api/company', companyRoutes);
 
 // Fix Static Uploads
@@ -100,7 +103,9 @@ app.get('/', (req, res) => res.send("API IS RUNNING"));
 // MONGODB
 if (process.env.MONGO_URI) {
   mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('MongoDB Atlas Connected'))
+    .then(() => {
+      console.log('MongoDB Atlas Connected');
+    })
     .catch(err => console.error('DB ERROR:', err));
 } else {
   console.error('CRITICAL: MONGO_URI is missing');

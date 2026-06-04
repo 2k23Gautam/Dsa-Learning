@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Users2 } from 'lucide-react';
 import { useStore } from '../store/StoreContext.jsx';
 import ProblemTable from '../components/ProblemTable.jsx';
-import ProblemModal from '../components/ProblemModal.jsx';
+import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { DifficultyBadge } from '../components/Badges.jsx';
 
 export default function FriendWise() {
   const { problems } = useStore();
-  const [editProblem, setEditProblem] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerProblem, setDrawerProblem] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState({});
 
   const groups = useMemo(() => {
@@ -24,8 +24,8 @@ export default function FriendWise() {
 
   const toggle = (name) => setCollapsed(c => ({ ...c, [name]: !c[name] }));
 
-  const openEdit = (p) => { setEditProblem(p); setModalOpen(true); };
-  const closeModal = () => { setModalOpen(false); setEditProblem(null); };
+  const openEdit = (p) => { setDrawerProblem(p); setDrawerOpen(true); };
+  const closeDrawer = () => { setDrawerOpen(false); setDrawerProblem(null); };
 
   if (!groups.length) return <EmptyState icon="friends" title="No problems yet" subtitle="Add problems and assign person names." />;
 
@@ -82,13 +82,13 @@ export default function FriendWise() {
 
           {!collapsed[name] && (
             <div className="border-t border-slate-200/50 dark:border-white/[0.04]">
-              <ProblemTable problems={ps} onEdit={openEdit} />
+              <ProblemTable problems={ps} />
             </div>
           )}
         </div>
       ))}
 
-      <ProblemModal open={modalOpen} onClose={closeModal} editProblem={editProblem} />
+      <ProblemDrawer open={drawerOpen} onClose={closeDrawer} problem={drawerProblem} initialTab="edit" />
     </div>
   );
 }

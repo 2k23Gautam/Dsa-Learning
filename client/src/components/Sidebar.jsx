@@ -3,9 +3,10 @@ import { X, LayoutDashboard, List, User, Users, Trello,
   LogOut,
   UserCircle,
   UserPlus,
-  AlertTriangle, Zap, CalendarDays, Sun, Moon, Building2,
+  AlertTriangle, Zap, CalendarDays, Sun, Moon, Building2, Briefcase,
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { buildAssetUrl, useStore } from '../store/StoreContext.jsx';
 import { useAuth } from '../store/AuthContext.jsx';
 import Logo from './Logo.jsx';
@@ -24,12 +25,13 @@ const NAV = [
 export default function Sidebar({ isOpen, onClose }) {
   const { theme, toggleTheme, stats } = useStore();
   const { authUser } = useAuth();
+  const location = useLocation();
 
   return (
     <aside className={`fixed md:relative flex flex-col w-[280px] md:w-[240px] h-full shrink-0
-                      bg-white dark:bg-[#020617]
+                      bg-white dark:bg-slate-950
                       border-r border-slate-200 dark:border-white/[0.06]
-                      transition-all duration-300 z-50
+                      transition-transform duration-300 z-50
                       ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       
       {/* Logo Area */}
@@ -41,29 +43,35 @@ export default function Sidebar({ isOpen, onClose }) {
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto relative">
+        {NAV.map(({ to, icon: Icon, label }) => {
+          const isActive = location.pathname.startsWith(to);
+          return (
           <NavLink
             key={to}
             to={to}
             onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group
+            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 group z-10
               ${isActive
-                ? 'bg-white dark:bg-white/[0.06] text-brand-600 dark:text-brand-400 shadow-sm border border-slate-200 dark:border-transparent'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.03] hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
+                ? 'text-brand-600 dark:text-brand-400'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`
             }
           >
-            {({ isActive }) => (
-              <>
-                <Icon size={16} className={isActive
-                  ? 'text-brand-600 dark:text-brand-400'
-                  : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors duration-150'
-                } />
-                <span className="tracking-tight">{label}</span>
+            {isActive && (
+              <motion.div
+                layoutId="sidebar-active-indicator"
+                className="absolute inset-0 bg-brand-50/80 dark:bg-white/[0.06] rounded-lg -z-10"
+                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              />
+            )}
+            <Icon size={18} className={isActive
+              ? 'text-brand-600 dark:text-brand-400'
+              : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors duration-150'
+            } />
+            <span className="tracking-wide z-10">{label}</span>
                 {to === '/revision' && stats.needsRevision > 0 && (
-                  <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md
+                  <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md z-10
                     ${isActive
                       ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
                       : 'bg-slate-100 text-slate-500 dark:bg-white/[0.04] dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-white/[0.08]'
@@ -72,7 +80,7 @@ export default function Sidebar({ isOpen, onClose }) {
                   </span>
                 )}
                 {to === '/community' && authUser?.friendRequests?.filter(r => r.status === 'pending').length > 0 && (
-                  <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full
+                  <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full z-10
                     ${isActive
                       ? 'bg-brand-600 text-white'
                       : 'bg-brand-500 text-white flex items-center justify-center'
@@ -80,10 +88,9 @@ export default function Sidebar({ isOpen, onClose }) {
                     {authUser.friendRequests.filter(r => r.status === 'pending').length}
                   </span>
                 )}
-              </>
-            )}
           </NavLink>
-        ))}
+        );
+        })}
       </nav>
 
       {/* Bottom: Profile & Theme */}

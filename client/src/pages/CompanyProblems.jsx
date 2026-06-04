@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2, ChevronRight, CheckCircle2, Circle, Clock,
@@ -61,6 +61,55 @@ export default function CompanyProblems() {
   const [diffFilter, setDiffFilter]         = useState('All');
   const [statusFilter, setStatusFilter]     = useState('All');
   const [sortBy, setSortBy]                 = useState('frequency');
+  const [visibleCount, setVisibleCount]     = useState(25);
+  const sentinelRef                         = useRef(null);
+
+  // ── Filtered + sorted problems ───────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = [...problems];
+    if (search) list = list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.topics || []).some(t => t.toLowerCase().includes(search.toLowerCase())));
+    if (diffFilter !== 'All') list = list.filter(p => p.difficulty === diffFilter);
+    if (statusFilter !== 'All') list = list.filter(p => p.status === statusFilter);
+    list.sort((a, b) => {
+      if (sortBy === 'frequency') return (b.frequency || 0) - (a.frequency || 0);
+      if (sortBy === 'difficulty') {
+        const order = { Easy: 0, Medium: 1, Hard: 2 };
+        return order[a.difficulty] - order[b.difficulty];
+      }
+      if (sortBy === 'status') {
+        const order = { Solved: 0, Attempted: 1, 'Not Started': 2 };
+        return order[a.status] - order[b.status];
+      }
+      return 0;
+    });
+    return list;
+  }, [problems, search, diffFilter, statusFilter, sortBy]);
+
+  useEffect(() => {
+    setVisibleCount(25);
+  }, [selectedCompany, search, diffFilter, statusFilter, sortBy]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(prev => Math.min(filtered.length, prev + 25));
+      }
+    }, {
+      root: null,
+      rootMargin: '150px',
+      threshold: 0.1
+    });
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [filtered]);
+
+  const visibleProblems = useMemo(() => {
+    return filtered.slice(0, visibleCount);
+  }, [filtered, visibleCount]);
 
   // ── Fetch company list on mount ──────────────────────────────────────────
   const fetchCompanies = useCallback(async () => {
@@ -165,26 +214,7 @@ export default function CompanyProblems() {
     return data;
   }, [stats]);
 
-  // ── Filtered + sorted problems ───────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let list = [...problems];
-    if (search) list = list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.topics || []).some(t => t.toLowerCase().includes(search.toLowerCase())));
-    if (diffFilter !== 'All') list = list.filter(p => p.difficulty === diffFilter);
-    if (statusFilter !== 'All') list = list.filter(p => p.status === statusFilter);
-    list.sort((a, b) => {
-      if (sortBy === 'frequency') return (b.frequency || 0) - (a.frequency || 0);
-      if (sortBy === 'difficulty') {
-        const order = { Easy: 0, Medium: 1, Hard: 2 };
-        return order[a.difficulty] - order[b.difficulty];
-      }
-      if (sortBy === 'status') {
-        const order = { Solved: 0, Attempted: 1, 'Not Started': 2 };
-        return order[a.status] - order[b.status];
-      }
-      return 0;
-    });
-    return list;
-  }, [problems, search, diffFilter, statusFilter, sortBy]);
+
 
   const meta = selectedCompany ? (COMPANY_META[selectedCompany] || { color: '#6366f1', emoji: '🏢', grad: 'from-indigo-500/20 to-indigo-400/5' }) : null;
 
@@ -216,12 +246,7 @@ export default function CompanyProblems() {
             ))}
           </div>
         ) : (
-          <motion.div
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-            initial="hidden"
-            animate="show"
-            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-          >
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
             {companies.map(({ company, total, solved, attempted }) => {
               const cm = COMPANY_META[company] || { color: '#6366f1', emoji: '🏢', grad: 'from-indigo-500/20 to-indigo-400/5' };
               const pct = total > 0 ? Math.round((solved / total) * 100) : 0;
@@ -229,11 +254,10 @@ export default function CompanyProblems() {
               const strokeDash = (pct / 100) * circumference;
 
               return (
-                <motion.button
+                <button
                   key={company}
-                  variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
                   onClick={() => handleSelectCompany(company)}
-                  className={`group relative overflow-hidden glass-card p-5 text-left transition-all hover:scale-[1.02] hover:shadow-xl flex flex-col gap-3 bg-gradient-to-br ${cm.grad}`}
+                  className={`group relative overflow-hidden glass-card p-5 text-left transition-all hover:scale-[1.02] hover:shadow-xl flex flex-col gap-3 bg-gradient-to-br ${cm.grad} animate-in fade-in-50 slide-in-from-bottom-4 duration-200`}
                 >
                   {/* Background glow */}
                   <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
@@ -284,10 +308,10 @@ export default function CompanyProblems() {
                     </span>
                     <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-1 transition-transform" style={{ color: cm.color }} />
                   </div>
-                </motion.button>
+                </button>
               );
             })}
-          </motion.div>
+          </div>
         )}
       </div>
     );
@@ -297,15 +321,13 @@ export default function CompanyProblems() {
   const companyData = companies.find(c => c.company === selectedCompany);
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={selectedCompany}
-        initial={{ opacity: 0, x: 30 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -30 }}
-        transition={{ duration: 0.25 }}
-        className="space-y-6"
-      >
+    <motion.div
+      key={selectedCompany || 'list'}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+      className="space-y-6"
+    >
         {/* Header */}
         <div className="flex items-center gap-4">
           <button
@@ -505,8 +527,8 @@ export default function CompanyProblems() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr>
+                <thead className="sticky top-0 z-30">
+                  <tr className="border-b border-slate-200 dark:border-white/[0.08] bg-white/90 dark:bg-slate-950/90 backdrop-blur-md shadow-sm">
                     <th className="table-th w-8">#</th>
                     <th
                       className="table-th"
@@ -526,108 +548,116 @@ export default function CompanyProblems() {
                   </tr>
                 </thead>
                 <tbody>
-                  <AnimatePresence>
-                    {filtered.map((problem, idx) => (
-                      <motion.tr
-                        key={problem.id}
-                        layout
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="table-row"
-                      >
-                        {/* Index */}
-                        <td className="table-td text-slate-400 text-xs tabular-nums">{idx + 1}</td>
+                  {visibleProblems.map((problem, idx) => (
+                    <tr
+                      key={problem.id}
+                      className="table-row animate-in fade-in duration-200"
+                    >
+                      {/* Index */}
+                      <td className="table-td text-slate-400 text-xs tabular-nums">{idx + 1}</td>
 
-                        {/* Name */}
-                        <td className="table-td max-w-[260px]">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                            {problem.name}
-                          </span>
-                        </td>
+                      {/* Name */}
+                      <td className="table-td max-w-[260px]">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                          {problem.name}
+                        </span>
+                      </td>
 
-                        {/* Difficulty */}
-                        <td className="table-td hidden md:table-cell">
-                          <span
-                            className="text-[11px] font-bold px-2 py-0.5 rounded-md"
-                            style={{
-                              color: DIFF_COLORS[problem.difficulty],
-                              backgroundColor: DIFF_COLORS[problem.difficulty] + '15',
-                            }}
-                          >
-                            {problem.difficulty}
-                          </span>
-                        </td>
+                      {/* Difficulty */}
+                      <td className="table-td hidden md:table-cell">
+                        <span
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-md"
+                          style={{
+                            color: DIFF_COLORS[problem.difficulty],
+                            backgroundColor: DIFF_COLORS[problem.difficulty] + '15',
+                          }}
+                        >
+                          {problem.difficulty}
+                        </span>
+                      </td>
 
-                        {/* Topics */}
-                        <td className="table-td hidden lg:table-cell">
-                          <div className="flex flex-wrap gap-1 max-w-[220px]">
-                            {(problem.topics || []).slice(0, 3).map(t => (
-                              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400">
-                                {t}
-                              </span>
-                            ))}
-                            {problem.topics?.length > 3 && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-400">
-                                +{problem.topics.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Frequency stars */}
-                        <td className="table-td">
-                          <div className="flex gap-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <div
-                                key={i}
-                                className={`w-1.5 h-1.5 rounded-full ${i < (problem.frequency || 3) ? 'opacity-100' : 'opacity-20'}`}
-                                style={{ backgroundColor: i < (problem.frequency || 3) ? meta.color : '#94a3b8' }}
-                              />
-                            ))}
-                          </div>
-                        </td>
-
-                        {/* Status Toggle */}
-                        <td className="table-td">
-                          <button
-                            disabled={updatingId === problem.id}
-                            onClick={() => handleStatusToggle(problem)}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            style={{
-                              color: STATUS_COLORS[problem.status],
-                              backgroundColor: STATUS_COLORS[problem.status] + '15',
-                            }}
-                          >
-                            {problem.status === 'Solved' && <CheckCircle2 size={12} />}
-                            {problem.status === 'Attempted' && <Clock size={12} />}
-                            {problem.status === 'Not Started' && <Circle size={12} />}
-                            <span className="hidden sm:inline">
-                              {updatingId === problem.id ? '…' : problem.status}
+                      {/* Topics */}
+                      <td className="table-td hidden lg:table-cell">
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {(problem.topics || []).slice(0, 3).map(t => (
+                            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400">
+                              {t}
                             </span>
-                          </button>
-                        </td>
+                          ))}
+                          {problem.topics?.length > 3 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-400">
+                              +{problem.topics.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                        {/* External link */}
-                        <td className="table-td">
-                          <a
-                            href={problem.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors inline-flex"
-                          >
-                            <ExternalLink size={13} />
-                          </a>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
+                      {/* Frequency stars */}
+                      <td className="table-td">
+                        <div className="flex gap-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`w-1.5 h-1.5 rounded-full ${i < (problem.frequency || 3) ? 'opacity-100' : 'opacity-20'}`}
+                              style={{ backgroundColor: i < (problem.frequency || 3) ? meta.color : '#94a3b8' }}
+                            />
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* Status Toggle */}
+                      <td className="table-td">
+                        <button
+                          disabled={updatingId === problem.id}
+                          onClick={() => handleStatusToggle(problem)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                          style={{
+                            color: STATUS_COLORS[problem.status],
+                            backgroundColor: STATUS_COLORS[problem.status] + '15',
+                          }}
+                        >
+                          {problem.status === 'Solved' && <CheckCircle2 size={12} />}
+                          {problem.status === 'Attempted' && <Clock size={12} />}
+                          {problem.status === 'Not Started' && <Circle size={12} />}
+                          <span className="hidden sm:inline">
+                            {updatingId === problem.id ? '…' : problem.status}
+                          </span>
+                        </button>
+                      </td>
+
+                      {/* External link */}
+                      <td className="table-td">
+                        <a
+                          href={problem.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors inline-flex"
+                        >
+                          <ExternalLink size={13} />
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
+              <div ref={sentinelRef} className="py-5 flex items-center justify-center border-t border-slate-200 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.01]">
+                <div className="text-xs font-semibold text-slate-500 flex items-center gap-2">
+                  {visibleCount < filtered.length ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin text-brand-500" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                        <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
+                      </svg>
+                      <span>Showing {visibleCount} of {filtered.length} problems (scroll to load more)</span>
+                    </>
+                  ) : (
+                    <span>Showing all {filtered.length} problems</span>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
       </motion.div>
-    </AnimatePresence>
   );
 }

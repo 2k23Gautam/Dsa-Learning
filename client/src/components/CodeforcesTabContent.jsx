@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { API_BASE_URL } from '../store/StoreContext';
 
 export default function CodeforcesTabContent({ handle }) {
   const [data, setData] = useState(null);
@@ -9,12 +10,17 @@ export default function CodeforcesTabContent({ handle }) {
   useEffect(() => {
     if (!handle) return;
     
-    // Fetch live CF data when active
-    fetch(`https://codeforces.com/api/user.info?handles=${handle}`)
+    // Fetch live CF data via backend proxy
+    const token = localStorage.getItem('dsa_token');
+    fetch(`${API_BASE_URL}/api/codeforces/stats/${handle}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    })
       .then(res => res.json())
       .then(json => {
-        if (json.status === 'OK' && json.result.length > 0) {
-          setData(json.result[0]);
+        if (json && !json.message) {
+          setData(json);
         }
       })
       .catch(e => console.error('CF Fetch Error:', e))
@@ -53,18 +59,20 @@ export default function CodeforcesTabContent({ handle }) {
     >
       {/* Profile Info Block */}
       <div className="flex items-center gap-4 border-r border-slate-200 dark:border-white/10 pr-8">
-        {data?.titlePhoto ? (
-           <img src={data.titlePhoto} alt="CF Avatar" className="w-12 h-12 rounded-xl object-cover shadow-sm" />
+        {data?.titlePhoto && !data.titlePhoto.includes('no-avatar') ? (
+           <img src={data.titlePhoto} alt="CF Avatar" className="w-12 h-12 rounded-xl object-cover shadow-md" />
         ) : (
-           <div className="w-12 h-12 rounded-xl bg-blue-500/10" />
+           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-amber-600 flex items-center justify-center text-white text-lg font-black font-outfit shadow-md shadow-amber-500/20">
+             CF
+           </div>
         )}
         <div>
-          <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 tracking-tight">
             {handle}
           </h3>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider mt-0.5 inline-block bg-slate-100 dark:bg-white/5 ${getRankColor(data?.rank)}`}>
             {data?.rank || 'Unrated'}
-          </p>
+          </span>
         </div>
       </div>
 
@@ -73,21 +81,21 @@ export default function CodeforcesTabContent({ handle }) {
         <>
           <div className="text-center border-r border-slate-200 dark:border-white/10 pr-8">
              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contest Rating</p>
-             <p className="text-xl font-bold text-emerald-500">
+             <p className="text-2xl font-extrabold font-outfit text-emerald-500">
                {data.rating || '--'}
              </p>
           </div>
 
           <div className="text-center border-r border-slate-200 dark:border-white/10 pr-8">
              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Max Rating</p>
-             <p className="text-xl font-bold text-blue-500">
+             <p className="text-2xl font-extrabold font-outfit text-blue-500">
                {data.maxRating || '--'}
              </p>
           </div>
 
           <div className="text-center pr-8">
              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contribution</p>
-             <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
+             <p className="text-2xl font-extrabold font-outfit text-slate-700 dark:text-slate-300">
                {data.contribution > 0 ? '+' : ''}{data.contribution || '0'}
              </p>
           </div>
@@ -95,8 +103,13 @@ export default function CodeforcesTabContent({ handle }) {
       )}
 
       {/* External Link */}
-      <a href={`https://codeforces.com/profile/${handle}`} target="_blank" rel="noreferrer" className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition-colors ml-auto mr-2">
-        <ExternalLink size={18} />
+      <a 
+        href={`https://codeforces.com/profile/${handle}`} 
+        target="_blank" 
+        rel="noreferrer" 
+        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all ml-auto border border-slate-200/50 dark:border-white/[0.04]"
+      >
+        View Profile <ExternalLink size={12} />
       </a>
     </motion.div>
   );

@@ -81,24 +81,43 @@ router.get('/recent/:username', auth, async (req, res) => {
   `;
 
   try {
+    // Try with enhanced headers that mimic a browser request
     const response = await fetch('https://leetcode.com/graphql/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Referer': 'https://leetcode.com',
-        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+        'Origin': 'https://leetcode.com',
+        'Referer': `https://leetcode.com/${username}/`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'x-requested-with': 'XMLHttpRequest',
       },
       body: JSON.stringify({
         query: query,
         variables: { username, limit: 50 },
+        operationName: 'recentAcSubmissions',
       }),
     });
 
+    if (!response.ok) {
+      console.error(`LeetCode API returned status ${response.status} for user ${username}`);
+      return res.status(response.status).json({ message: 'LeetCode API error', status: response.status });
+    }
+
     const data = await response.json();
-    if (data.errors) return res.status(404).json({ message: 'Error fetching recent submissions' });
-    res.json(data.data.recentAcSubmissionList);
+    if (data.errors) {
+      console.error('LeetCode GraphQL errors:', JSON.stringify(data.errors));
+      return res.status(404).json({ message: 'Error fetching recent submissions', errors: data.errors });
+    }
+    const list = data?.data?.recentAcSubmissionList;
+    if (!Array.isArray(list)) {
+      console.error('Unexpected LeetCode response shape:', JSON.stringify(data).substring(0, 300));
+      return res.status(502).json({ message: 'Unexpected response from LeetCode' });
+    }
+    res.json(list);
   } catch (err) {
-    res.status(500).send('Server Error');
+    console.error('LeetCode recent fetch error:', err.message);
+    res.status(500).json({ message: 'Server Error', error: err.message });
   }
 });
 

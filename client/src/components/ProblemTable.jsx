@@ -1,16 +1,41 @@
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { ArrowUpDown, Maximize2, Edit2, CheckCircle2, Star, Lightbulb, X, Code2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowUpDown, Maximize2, Edit2, CheckCircle2, Star, Lightbulb, Code2 } from 'lucide-react';
 import { useStore } from '../store/StoreContext.jsx';
 import { DifficultyBadge, PlatformBadge, TopicBadge, PatternBadge } from './Badges.jsx';
-import CodeSolutionModal from './CodeSolutionModal.jsx';
-import ProblemViewerModal from './ProblemViewerModal.jsx';
-import MarkdownRenderer from './MarkdownRenderer.jsx';
+import ProblemDrawer from './ProblemDrawer.jsx';
 
-export default function ProblemTable({ problems, onEdit }) {
+export default function ProblemTable({ problems }) {
   const { filters, setFilter, togglePOTD } = useStore();
-  const [approachModal, setApproachModal] = useState({ open: false, problem: null });
-  const [codeModal, setCodeModal] = useState({ open: false, problem: null });
+  const [drawerState, setDrawerState] = useState({ open: false, problem: null, initialTab: 'overview' });
+  const [hoveredRowId, setHoveredRowId] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(25);
+  const sentinelRef = useRef(null);
+
+  useEffect(() => {
+    setVisibleCount(25);
+  }, [problems]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(prev => Math.min(problems.length, prev + 25));
+      }
+    }, {
+      root: null,
+      rootMargin: '150px',
+      threshold: 0.1
+    });
+
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [problems]);
+
+  const visibleProblems = useMemo(() => {
+    return problems.slice(0, visibleCount);
+  }, [problems, visibleCount]);
 
   const handleSort = (key) => {
     if (filters.sortBy === key) {
@@ -30,8 +55,8 @@ export default function ProblemTable({ problems, onEdit }) {
   return (
     <div className="w-full overflow-x-auto no-scrollbar pb-2">
       <table className="w-full text-left min-w-[900px]">
-        <thead>
-          <tr className="border-b border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02]">
+        <thead className="sticky top-0 z-30">
+          <tr className="border-b border-slate-200 dark:border-white/[0.08] bg-white/90 dark:bg-slate-950/90 backdrop-blur-md shadow-sm">
             <th className="table-th w-10"></th>
             <th className="table-th" onClick={() => handleSort('name')}>Problem <SortIcon sortKey="name"/></th>
             <th className="table-th" onClick={() => handleSort('platform')}>Platform <SortIcon sortKey="platform"/></th>
@@ -46,25 +71,41 @@ export default function ProblemTable({ problems, onEdit }) {
           </tr>
         </thead>
         <tbody>
-          {problems.map((p) => (
-            <tr key={p.id} className="table-row group">
+          {visibleProblems.map((p) => (
+            <tr 
+              key={p.id} 
+              className="table-row group cursor-pointer"
+              onMouseEnter={() => setHoveredRowId(p.id)}
+              onMouseLeave={() => setHoveredRowId(null)}
+              onClick={() => setDrawerState({ open: true, problem: p, initialTab: 'overview' })}
+            >
               <td className="table-td pl-4">
                 {p.status === 'Solved' ? <CheckCircle2 size={16} className="text-emerald-500" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />}
               </td>
-              <td className="table-td font-medium text-slate-900 dark:text-slate-100 max-w-[200px] truncate">
+              <td className="table-td font-medium text-slate-900 dark:text-slate-100 max-w-[200px] relative group/name">
                 <div className="flex items-center gap-2">
                   {p.link ? (
-                    <a href={p.link} target="_blank" rel="noreferrer" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline underline-offset-2 flex items-center gap-1.5 transition-colors truncate">
-                      {p.name}
-                      <Maximize2 size={12} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    <a href={p.link} target="_blank" rel="noreferrer" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline underline-offset-2 flex items-center gap-1.5 transition-colors truncate w-full">
+                      <span className="truncate">{p.name}</span>
+                      <Maximize2 size={12} className="opacity-0 group-hover/name:opacity-100 transition-opacity shrink-0" />
                     </a>
                   ) : (
-                    <span className="truncate">{p.name}</span>
+                    <span className="truncate w-full block">{p.name}</span>
+                  )}
+                  {/* Premium Minimalist Tooltip */}
+                  {hoveredRowId === p.id && (
+                    <div className="absolute left-0 bottom-full mb-2 z-[999] opacity-100 visible translate-y-0 transition-all duration-200 ease-out pointer-events-none">
+                      <div className="bg-[#18181b] dark:bg-[#09090b] text-[#f4f4f5] text-[13px] font-medium py-1.5 px-3 rounded-md shadow-2xl border border-[#27272a] whitespace-nowrap tracking-wide flex items-center">
+                        {p.name}
+                      </div>
+                      {/* Arrow */}
+                      <div className="absolute -bottom-1 left-6 w-2.5 h-2.5 bg-[#18181b] dark:bg-[#09090b] border-b border-r border-[#27272a] rotate-45"></div>
+                    </div>
                   )}
                   {/* Approach button */}
                   {p.approach && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setApproachModal({ open: true, problem: p }); }}
+                      onClick={(e) => { e.stopPropagation(); setDrawerState({ open: true, problem: p, initialTab: 'approach' }); }}
                       className="p-1 text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded transition-colors shrink-0"
                       title="View Approach & Intuition"
                     >
@@ -74,7 +115,7 @@ export default function ProblemTable({ problems, onEdit }) {
                   {/* Code Solution button */}
                   {p.solutionCode && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setCodeModal({ open: true, problem: p }); }}
+                      onClick={(e) => { e.stopPropagation(); setDrawerState({ open: true, problem: p, initialTab: 'code' }); }}
                       className="p-1 text-slate-400 hover:text-[#569cd6] hover:bg-[#569cd6]/10 rounded transition-colors shrink-0"
                       title="View Code Solution"
                     >
@@ -113,7 +154,10 @@ export default function ProblemTable({ problems, onEdit }) {
               </td>
               <td className="table-td text-right pr-4">
                 <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => onEdit(p)} className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setDrawerState({ open: true, problem: p, initialTab: 'edit' }); }} 
+                    className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors"
+                  >
                     <Edit2 size={16} />
                   </button>
                 </div>
@@ -122,47 +166,26 @@ export default function ProblemTable({ problems, onEdit }) {
           ))}
         </tbody>
       </table>
-      <div className="py-3 px-4 text-xs text-slate-500 font-medium">
-        {problems.length} problem{problems.length !== 1 ? 's' : ''} shown
+      <div ref={sentinelRef} className="py-5 flex items-center justify-center border-t border-slate-200 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.01]">
+        <div className="text-xs font-semibold text-slate-500 flex items-center gap-2">
+          {visibleCount < problems.length ? (
+            <>
+              <svg className="w-4 h-4 animate-spin text-brand-500" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
+              </svg>
+              <span>Showing {visibleCount} of {problems.length} problems (scroll to load more)</span>
+            </>
+          ) : (
+            <span>Showing all {problems.length} problems</span>
+          )}
+        </div>
       </div>
-
-      {/* Approach Modal */}
-      {approachModal.open && createPortal(
-        <div className="modal-overlay z-[100]" onClick={() => setApproachModal({ open: false, problem: null })}>
-          <div className="modal-box flex flex-col max-w-lg w-full" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 flex items-center justify-between border-b border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02]">
-              <h2 className="text-xl font-bold font-outfit tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                <Lightbulb size={20} className="text-amber-500" />
-                Approach & Intuition
-              </h2>
-              <button onClick={() => setApproachModal({ open: false, problem: null })} className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <div className="mb-4">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">Problem</span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white">{approachModal.problem?.name}</span>
-              </div>
-              <div className="text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                {approachModal.problem?.approach ? (
-                  <MarkdownRenderer content={approachModal.problem.approach} />
-                ) : (
-                  <span className="italic opacity-60">No approach recorded for this problem yet.</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Comprehensive Problem Viewer Modal */}
-      <ProblemViewerModal
-        open={codeModal.open}
-        onClose={() => setCodeModal({ open: false, problem: null })}
-        problem={codeModal.problem}
-        onEdit={onEdit}
+      <ProblemDrawer
+        open={drawerState.open}
+        onClose={() => setDrawerState({ open: false, problem: null, initialTab: 'overview' })}
+        problem={drawerState.problem}
+        initialTab={drawerState.initialTab}
       />
     </div>
   );

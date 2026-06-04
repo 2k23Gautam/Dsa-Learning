@@ -3,14 +3,36 @@ import { Plus, List } from 'lucide-react';
 import { useStore } from '../store/StoreContext.jsx';
 import ProblemTable from '../components/ProblemTable.jsx';
 import FilterBar from '../components/FilterBar.jsx';
-import ProblemModal from '../components/ProblemModal.jsx';
+import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 
+function TableSkeleton() {
+  return (
+    <div className="w-full space-y-4 p-5 animate-pulse">
+      <div className="flex gap-4 border-b border-slate-200 dark:border-white/[0.06] pb-3">
+        <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-1/4" />
+        <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-1/12" />
+        <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-1/6" />
+        <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-1/6" />
+        <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-1/12" />
+      </div>
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="flex gap-4 items-center py-2 border-b border-slate-100 dark:border-white/[0.02]">
+          <div className="h-5 bg-slate-200 dark:bg-white/[0.04] rounded w-1/4" />
+          <div className="h-5 bg-slate-200 dark:bg-white/[0.04] rounded-full w-12" />
+          <div className="h-5 bg-slate-200 dark:bg-white/[0.04] rounded-full w-16" />
+          <div className="h-5 bg-slate-200 dark:bg-white/[0.04] rounded w-1/6" />
+          <div className="h-4 bg-slate-200 dark:bg-white/[0.04] rounded w-20 ml-auto" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AllProblems() {
-  const { problems, filters } = useStore();
+  const { problems, filters, problemsLoading } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editProblem, setEditProblem] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const filteredProblems = useMemo(() => {
     return problems.filter(p => {
@@ -53,9 +75,19 @@ export default function AllProblems() {
     });
   }, [problems, searchQuery, filters]);
 
-  const openNew = () => { setEditProblem(null); setModalOpen(true); };
-  const openEdit = (p) => { setEditProblem(p); setModalOpen(true); };
-  const closeModal = () => { setModalOpen(false); setEditProblem(null); };
+  const stats = useMemo(() => {
+    let easy = 0, medium = 0, hard = 0;
+    filteredProblems.forEach(p => {
+      if (p.difficulty === 'Easy') easy++;
+      else if (p.difficulty === 'Medium') medium++;
+      else if (p.difficulty === 'Hard') hard++;
+    });
+    const total = filteredProblems.length;
+    return { total, easy, medium, hard };
+  }, [filteredProblems]);
+
+  const openNew = () => { setDrawerOpen(true); };
+  const closeDrawer = () => { setDrawerOpen(false); };
 
   return (
     <div className="flex flex-col h-full space-y-4">
@@ -76,13 +108,50 @@ export default function AllProblems() {
         </button>
       </div>
 
+      {/* Quick Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+        <div className="gradient-glass glow-card-brand p-4 flex flex-col justify-between h-20 relative overflow-hidden group hover:border-brand-500/30">
+          <span className="text-[9px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-widest block">Filtered</span>
+          <p className="text-xl font-black font-outfit text-slate-800 dark:text-white leading-none mt-0.5">{stats.total}</p>
+          <div className="h-1 w-full bg-slate-100 dark:bg-white/[0.06] rounded-full overflow-hidden mt-1.5">
+            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${problems.length > 0 ? (stats.total / problems.length) * 100 : 0}%` }} />
+          </div>
+        </div>
+
+        <div className="gradient-glass glow-card-easy p-4 flex flex-col justify-between h-20 relative overflow-hidden group hover:border-emerald-500/30">
+          <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block">Easy</span>
+          <p className="text-xl font-black font-outfit text-slate-800 dark:text-white leading-none mt-0.5">{stats.easy}</p>
+          <div className="h-1 w-full bg-slate-100 dark:bg-white/[0.06] rounded-full overflow-hidden mt-1.5">
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${stats.total > 0 ? (stats.easy / stats.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+
+        <div className="gradient-glass glow-card-amber p-4 flex flex-col justify-between h-20 relative overflow-hidden group hover:border-amber-500/30">
+          <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block">Medium</span>
+          <p className="text-xl font-black font-outfit text-slate-800 dark:text-white leading-none mt-0.5">{stats.medium}</p>
+          <div className="h-1 w-full bg-slate-100 dark:bg-white/[0.06] rounded-full overflow-hidden mt-1.5">
+            <div className="h-full bg-amber-500 rounded-full" style={{ width: `${stats.total > 0 ? (stats.medium / stats.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+
+        <div className="gradient-glass glow-card-rose p-4 flex flex-col justify-between h-20 relative overflow-hidden group hover:border-rose-500/30">
+          <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest block">Hard</span>
+          <p className="text-xl font-black font-outfit text-slate-800 dark:text-white leading-none mt-0.5">{stats.hard}</p>
+          <div className="h-1 w-full bg-slate-100 dark:bg-white/[0.06] rounded-full overflow-hidden mt-1.5">
+            <div className="h-full bg-rose-500 rounded-full" style={{ width: `${stats.total > 0 ? (stats.hard / stats.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+      </div>
+
       <FilterBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
       {/* Main Content Area */}
-      <div className="flex-1 glass-card overflow-hidden flex flex-col min-h-0">
+      <div className="flex-1 gradient-glass overflow-hidden flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto w-full no-scrollbar relative min-h-[400px]">
-          {filteredProblems.length > 0 ? (
-            <ProblemTable problems={filteredProblems} onEdit={openEdit} />
+          {problemsLoading ? (
+            <TableSkeleton />
+          ) : filteredProblems.length > 0 ? (
+            <ProblemTable problems={filteredProblems} />
           ) : (
             <div className="absolute inset-0 flex">
               <EmptyState 
@@ -95,7 +164,7 @@ export default function AllProblems() {
         </div>
       </div>
 
-      <ProblemModal open={modalOpen} onClose={closeModal} editProblem={editProblem} />
+      <ProblemDrawer open={drawerOpen} onClose={closeDrawer} />
     </div>
   );
 }

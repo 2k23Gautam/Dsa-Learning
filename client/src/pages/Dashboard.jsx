@@ -1,36 +1,67 @@
 import { useMemo, useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { format, subDays, subMonths } from 'date-fns';
-import { Target, CheckCircle2, Flame, TrendingUp, Globe, ExternalLink, CalendarDays } from 'lucide-react';
+import { Target, CheckCircle2, Flame, TrendingUp, Globe, ExternalLink, CalendarDays, Clock, Award, Network, Share2, Type, Layers, Zap, Binary, Database, BookOpen, Search } from 'lucide-react';
 import { buildApiUrl, useStore } from '../store/StoreContext.jsx';
 import { useAuth } from '../store/AuthContext.jsx';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import ProblemModal from '../components/ProblemModal.jsx';
 import CircularProgress from '../components/CircularProgress.jsx';
 import CodeforcesTabContent from '../components/CodeforcesTabContent.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import BadgeDisplay from '../components/BadgeDisplay.jsx';
-import DailyWheelModal from '../components/DailyWheelModal.jsx';
 import MilestoneModal from '../components/MilestoneModal.jsx';
-import ProblemViewerModal from '../components/ProblemViewerModal.jsx';
+import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import { Sparkles } from 'lucide-react';
 
 import { BAR_COLORS } from '../store/data.js';
 
+const MONTHS = [
+  { value: 0, label: 'Jan' },
+  { value: 1, label: 'Feb' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Apr' },
+  { value: 4, label: 'May' },
+  { value: 5, label: 'Jun' },
+  { value: 6, label: 'Jul' },
+  { value: 7, label: 'Aug' },
+  { value: 8, label: 'Sep' },
+  { value: 9, label: 'Oct' },
+  { value: 10, label: 'Nov' },
+  { value: 11, label: 'Dec' },
+];
+
+const getTopicIcon = (topic) => {
+  const t = topic.toLowerCase();
+  if (t.includes('tree')) return <Network size={16} className="text-blue-500" />;
+  if (t.includes('graph')) return <Share2 size={16} className="text-indigo-500" />;
+  if (t.includes('string')) return <Type size={16} className="text-pink-500" />;
+  if (t.includes('array') || t.includes('list') || t.includes('matrix') || t.includes('vector')) return <Layers size={16} className="text-emerald-500" />;
+  if (t.includes('dp') || t.includes('dynamic') || t.includes('greedy') || t.includes('backtrack')) return <Zap size={16} className="text-amber-500" />;
+  if (t.includes('search') || t.includes('sort') || t.includes('binary search')) return <Search size={16} className="text-cyan-500" />;
+  if (t.includes('math') || t.includes('bit') || t.includes('number') || t.includes('geometry')) return <Binary size={16} className="text-purple-500" />;
+  if (t.includes('stack') || t.includes('queue') || t.includes('heap') || t.includes('hash') || t.includes('map') || t.includes('set')) return <Database size={16} className="text-rose-500" />;
+  return <BookOpen size={16} className="text-slate-500" />;
+};
+
 export default function Dashboard() {
-  const { stats, problems, detectedSubmissions, dismissSubmission, lastSyncTime, todayStr } = useStore();
+  const { stats, problems, detectedSubmissions, dismissSubmission, checkGlobalSubmissions, clearDismissedSubmissions, submissionSyncError, lastSyncTime, todayStr } = useStore();
   const { authUser } = useAuth();
   const [timeRange, setTimeRange] = useState('14 Days');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editProblem, setEditProblem] = useState(null);
-  const [revisionViewerOpen, setRevisionViewerOpen] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [showAllTopics, setShowAllTopics] = useState(false);
-  const [initialModalData, setInitialModalData] = useState(null);
+  const [drawerState, setDrawerState] = useState({ open: false, problem: null, initialTab: 'overview', initialData: null });
   const [contests, setContests] = useState([]);
   const [contestError, setContestError] = useState(false);
-  const [dailyModalOpen, setDailyModalOpen] = useState(false);
   const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { token } = useAuth();
+
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    await checkGlobalSubmissions(true);
+    setIsSyncing(false);
+  };
 
   const fetchContests = async () => {
     setContestError(false);
@@ -84,11 +115,25 @@ export default function Dashboard() {
     return problems.filter(p => p.status === 'Needs Revision' && p.revisionDate && p.revisionDate <= todayStr);
   }, [problems, todayStr]);
 
+  const availableYears = useMemo(() => {
+    const years = new Set([new Date().getFullYear()]);
+    problems.forEach(p => {
+      const dateStr = p.dateSolved || p.solvedDate;
+      if (dateStr && dateStr.length >= 4) {
+        const yr = parseInt(dateStr.substring(0, 4), 10);
+        if (!isNaN(yr)) {
+          years.add(yr);
+        }
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [problems]);
+
   const activityData = useMemo(() => {
     const data = [];
-    const now = new Date();
     
     if (timeRange === '14 Days') {
+      const now = new Date();
       for (let i = 13; i >= 0; i--) {
         const d = subDays(now, i);
         const ds = format(d, 'yyyy-MM-dd');
@@ -96,22 +141,23 @@ export default function Dashboard() {
         data.push({ date: format(d, 'MMM dd'), count });
       }
     } else if (timeRange === 'Month') {
-      for (let i = 29; i >= 0; i--) {
-        const d = subDays(now, i);
+      const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(selectedYear, selectedMonth, day);
         const ds = format(d, 'yyyy-MM-dd');
         const count = problems.filter(p => (p.dateSolved || p.solvedDate)?.substring(0,10) === ds).length;
         data.push({ date: format(d, 'MMM dd'), count });
       }
     } else if (timeRange === 'Year') {
-      for (let i = 11; i >= 0; i--) {
-        const d = subMonths(now, i);
-        const monthPrefix = format(d, 'yyyy-MM');
+      for (let m = 0; m < 12; m++) {
+        const monthPrefix = `${selectedYear}-${(m + 1).toString().padStart(2, '0')}`;
         const count = problems.filter(p => (p.dateSolved || p.solvedDate)?.startsWith(monthPrefix)).length;
+        const d = new Date(selectedYear, m, 1);
         data.push({ date: format(d, 'MMM'), count });
       }
     }
     return data;
-  }, [problems, timeRange]);
+  }, [problems, timeRange, selectedYear, selectedMonth]);
 
   const topicProgress = useMemo(() => {
     const map = {};
@@ -159,217 +205,281 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl md:text-3xl font-bold font-outfit text-slate-900 dark:text-white tracking-tight">
-            Overview
+      {/* Premium Header / Greeting Banner */}
+      <div 
+        className="relative overflow-hidden rounded-3xl border border-slate-200/50 dark:border-white/[0.06] bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 md:p-8 text-white shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6"
+      >
+        {/* Subtle grid pattern overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px] pointer-events-none" />
+        {/* Glow blobs */}
+        <div className="absolute -left-16 -top-16 w-32 h-32 rounded-full bg-brand-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute -right-16 -bottom-16 w-32 h-32 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+
+        <div className="space-y-1 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black bg-brand-500/20 border border-brand-500/30 text-brand-400 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+              Student Dashboard
+            </span>
+            <span className="text-[10px] font-black bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Active
+            </span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold font-outfit tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+            Welcome back, {authUser?.name || 'Developer'}! ✨
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm tracking-wide">
-            Your DSA progress at a glance
+          <p className="text-slate-400 text-sm font-medium">
+            You have solved <span className="text-brand-400 font-bold">{totalProblems}</span> problems in total. Ready to push your stats today?
           </p>
         </div>
-        {contests.length > 0 && (
-           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
-             <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-             <span className="text-[10px] font-black text-brand-600 uppercase tracking-widest">{contests.length} Upcoming Contests</span>
-           </div>
+
+        <div className="flex items-center gap-4 relative z-10 shrink-0 flex-wrap">
+          {/* Quick Stats Summary in Greeting */}
+          <div className="flex gap-2">
+            <div className="px-4 py-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.04] backdrop-blur-md">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Solved Today</span>
+              <span className="text-xl font-bold font-outfit text-white">{stats.today}</span>
+            </div>
+            <div className="px-4 py-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.04] backdrop-blur-md flex items-center gap-2">
+              <div>
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Current Streak</span>
+                <span className="text-xl font-bold font-outfit text-orange-400">{stats.streak}d</span>
+              </div>
+              <Flame size={20} className="text-orange-500 animate-pulse fill-orange-500/20" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Contest Monitor Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-1 px-1">
+          <div className="flex items-center gap-2">
+            <CalendarDays size={18} className="text-brand-500" />
+            <h2 className="text-sm font-extrabold font-outfit text-slate-900 dark:text-white uppercase tracking-wider">Upcoming Contests (Next 48h)</h2>
+          </div>
+          <button 
+            onClick={fetchContests}
+            className="text-[10px] font-black text-brand-500 uppercase tracking-widest hover:text-brand-600 transition-colors bg-brand-500/5 hover:bg-brand-500/10 px-2.5 py-1 rounded-md border border-brand-500/10"
+          >
+            Refresh List
+          </button>
+        </div>
+
+        {contests.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {contests.map((contest) => {
+              const isCodeforces = contest.platform?.toLowerCase().includes('codeforces');
+              const color = isCodeforces ? '#f59e0b' : '#3b82f6';
+              const bgClass = isCodeforces ? 'from-amber-500/10 to-amber-500/5 hover:border-amber-500/30' : 'from-blue-500/10 to-blue-500/5 hover:border-blue-500/30';
+              
+              return (
+                <div key={contest.id} className={`relative group overflow-hidden rounded-2xl border border-slate-200/50 dark:border-white/[0.06] bg-gradient-to-br ${bgClass} p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl`}>
+                  <div className="flex items-center justify-between gap-4 mb-3 relative z-10">
+                    <div className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
+                      style={{ backgroundColor: `${color}15`, color }}>
+                      {contest.platform}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                      <Clock size={12} className="text-slate-400" />
+                      {format(new Date(contest.startTime), 'MMM dd, HH:mm')}
+                    </div>
+                  </div>
+                  
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-4 line-clamp-1 relative z-10 tracking-tight">
+                    {contest.name}
+                  </h3>
+
+                  <div className="flex items-center justify-between relative z-10">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Starts in {Math.max(0, Math.round((contest.startTime - Date.now()) / (1000 * 60 * 60)))}h
+                    </p>
+                    <button 
+                      onClick={() => handleRegister(contest.id, contest.link)}
+                      className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-colors border border-slate-200/50 dark:border-white/[0.04]"
+                    >
+                      Register
+                    </button>
+                  </div>
+                  <div className="absolute -right-8 -bottom-8 w-24 h-24 rounded-full blur-3xl opacity-10"
+                    style={{ backgroundColor: color }} />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="glass-card p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-slate-200 dark:border-white/[0.08]">
+            <div className={`w-16 h-16 rounded-3xl flex items-center justify-center ${contestError ? 'bg-red-50 dark:bg-red-500/[0.08] text-red-400' : 'bg-slate-50 dark:bg-white/[0.02] text-slate-300 dark:text-slate-600'}`}>
+               <CalendarDays size={32} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                {contestError ? 'Could Not Load Contests' : 'No Upcoming Contests'}
+              </h3>
+              <p className="text-xs text-slate-500 max-w-[260px] mt-1">
+                {contestError
+                  ? 'The contest data source is temporarily unavailable. Please try refreshing.'
+                  : 'There are no contests scheduled on supported platforms in the next 48 hours.'}
+              </p>
+            </div>
+            <button onClick={fetchContests} className="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-600 text-[10px] font-black uppercase tracking-widest hover:bg-brand-500/20 transition-all">
+              {contestError ? 'Retry' : 'Check Now'}
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Contest Monitor Cards */}
-      <div className="flex items-center justify-between mb-2 px-1">
-        <h2 className="section-title mb-0">Upcoming Contests (Next 48h)</h2>
-        <button 
-          onClick={fetchContests}
-          className="text-[10px] font-black text-brand-500 uppercase tracking-widest hover:text-brand-600 transition-colors"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {contests.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {contests.map((contest) => (
-            <div key={contest.id} className="relative group overflow-hidden rounded-3xl border border-brand-500/10 bg-white dark:bg-white/[0.03] p-5 transition-all hover:border-brand-500/40 shadow-xl shadow-brand-500/5">
-              <div className="flex items-center justify-between gap-4 mb-4 relative z-10">
-                <div className="px-3 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-lg shadow-brand-500/20">
-                  {contest.platform}
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-bold text-[10px] uppercase tracking-tighter">
-                  <CalendarDays size={12} className="text-brand-500" />
-                  {format(new Date(contest.startTime), 'MMM dd, HH:mm')}
-                </div>
-              </div>
-              
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-4 line-clamp-1 relative z-10">
-                {contest.name}
+      {/* Bento Grid: Statistics Hub */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Main Bento Progress Card */}
+        <div className="md:col-span-2 gradient-glass p-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+          <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-brand-500/10 blur-3xl pointer-events-none" />
+          <div className="space-y-4 min-w-0 flex-1">
+            <div>
+              <span className="text-[10px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-widest block mb-1">
+                COMPLETION SCORE
+              </span>
+              <h3 className="text-xl font-bold font-outfit text-slate-800 dark:text-white tracking-tight">
+                Overall Progress
               </h3>
-
-              <div className="flex items-center justify-between relative z-10">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Starts in {Math.max(0, Math.round((contest.startTime - Date.now()) / (1000 * 60 * 60)))}h
-                </p>
-                <button 
-                  onClick={() => handleRegister(contest.id, contest.link)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-brand-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all border border-transparent hover:shadow-lg shadow-brand-500/20"
-                >
-                  Register
-                </button>
-              </div>
-              <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl group-hover:bg-brand-500/10 transition-all" />
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="glass-card p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-slate-200 dark:border-white/[0.08]">
-          <div className={`w-16 h-16 rounded-3xl flex items-center justify-center ${contestError ? 'bg-red-50 dark:bg-red-500/[0.08] text-red-400' : 'bg-slate-50 dark:bg-white/[0.02] text-slate-300 dark:text-slate-600'}`}>
-             <CalendarDays size={32} />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800 dark:text-white">
-              {contestError ? 'Could Not Load Contests' : 'No Upcoming Contests'}
-            </h3>
-            <p className="text-xs text-slate-500 max-w-[260px] mt-1">
-              {contestError
-                ? 'The contest data source is temporarily unavailable. Please try refreshing.'
-                : 'There are no contests scheduled on supported platforms in the next 48 hours.'}
-            </p>
-          </div>
-          <button onClick={fetchContests} className="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-600 text-[10px] font-black uppercase tracking-widest hover:bg-brand-500/20 transition-all">
-            {contestError ? 'Retry' : 'Check Now'}
-          </button>
-        </div>
-      )}
+            
+            {/* Minimalist analytics details */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-semibold">All Solved</span>
+                <span className="font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                  {stats.easy + stats.medium + stats.hard} / {totalProblems}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-white/[0.06] rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-brand-500 to-indigo-500 rounded-full"
+                  style={{ width: `${totalProblems > 0 ? ((stats.easy + stats.medium + stats.hard) / totalProblems) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
 
-      {/* Daily Challenge Premium Section */}
-      <div className="glass-card p-6 mb-8 border border-brand-500/20 backdrop-blur-xl relative overflow-hidden group">
-         {/* Background Accents */}
-         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-[100px] -z-10 group-hover:bg-brand-500/10 transition-colors" />
-         <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-emerald-500/5 rounded-full blur-[80px] -z-10" />
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{stats.easy} Easy</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{stats.medium} Med</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{stats.hard} Hard</span>
+              </div>
+            </div>
+          </div>
 
-         <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-            {/* Left: Badge & Points */}
-            <div className="flex items-center gap-6">
-              <BadgeDisplay 
-                points={authUser?.gdPoints || 0} 
-                size="lg" 
-                onClick={() => setMilestoneModalOpen(true)}
+          <div className="shrink-0 flex items-center justify-center">
+            <CircularProgress
+              label="TRACKING"
+              value={totalProblems}
+              max={totalProblems || 1}
+              color="#3b82f6"
+              size={120}
+              strokeWidth={10}
+              noCard
+              icon={<Target size={18} className="text-brand-500" />}
+            />
+          </div>
+        </div>
+
+        {/* Difficulty Bento Cards */}
+        <div className="grid grid-cols-3 md:grid-cols-1 md:col-span-1 gap-4">
+          <div className="gradient-glass p-4 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden group hover:border-emerald-500/30">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest block">EASY</span>
+              <p className="text-2xl font-black font-outfit text-slate-800 dark:text-white leading-none">{stats.easy}</p>
+            </div>
+            <div className="shrink-0 scale-90 md:scale-100">
+              <CircularProgress
+                label=""
+                value={stats.easy}
+                max={totalProblems || 1}
+                color="#10b981"
+                size={54}
+                strokeWidth={5}
+                noCard
               />
-              
-              <div className="hidden md:block h-12 w-[1px] bg-white/10" />
-
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Next Milestone</p>
-                  {(() => {
-                    const points = authUser?.gdPoints || 0;
-                    const TIERS = [
-                      { min: 5000, label: 'Legendary' },
-                      { min: 2000, label: 'Diamond' },
-                      { min: 1000, label: 'Platinum' },
-                      { min: 500,  label: 'Gold' },
-                      { min: 100,  label: 'Silver' },
-                      { min: 50,   label: 'Bronze' },
-                      { min: 0,    label: 'Novice' }
-                    ];
-                    const nextTier = [...TIERS].reverse().find(t => t.min > points) || TIERS[0];
-                    const currentTier = TIERS.find(t => points >= t.min) || TIERS[TIERS.length - 1];
-                    const progress = nextTier.min > currentTier.min 
-                      ? ((points - currentTier.min) / (nextTier.min - currentTier.min)) * 100 
-                      : 100;
-
-                    return (
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            className="h-full bg-gradient-to-r from-brand-500 to-emerald-500" 
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-400">
-                          {Math.round(nextTier.min - points)} to {nextTier.label}
-                        </span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
             </div>
+          </div>
 
-            {/* Right: Action */}
-            <div className="flex flex-col items-center md:items-end gap-3">
-              <div className="text-center md:text-right">
-                <h4 className="text-white font-black text-sm font-outfit tracking-tight">Daily assignment ready</h4>
-                <p className="text-brand-500/80 text-[10px] font-bold uppercase tracking-[0.1em] mt-0.5">Earn Points for every solve</p>
-              </div>
-
-              <button 
-                onClick={() => setDailyModalOpen(true)}
-                className="relative overflow-hidden px-8 py-3 rounded-2xl bg-brand-500 text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-brand-600 shadow-xl shadow-brand-500/20 transition-all flex items-center gap-2 group/btn"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:animate-shimmer" />
-                Solve Now <Sparkles size={14} className="group-hover/btn:rotate-12 transition-transform" />
-              </button>
+          <div className="gradient-glass p-4 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden group hover:border-amber-500/30">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest block">MEDIUM</span>
+              <p className="text-2xl font-black font-outfit text-slate-800 dark:text-white leading-none">{stats.medium}</p>
             </div>
-         </div>
-      </div>
+            <div className="shrink-0 scale-90 md:scale-100">
+              <CircularProgress
+                label=""
+                value={stats.medium}
+                max={totalProblems || 1}
+                color="#f59e0b"
+                size={54}
+                strokeWidth={5}
+                noCard
+              />
+            </div>
+          </div>
 
-      {/* Grid: Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        <CircularProgress
-          label="Total Tracked"
-          value={totalProblems}
-          max={totalProblems || 1}
-          color="#3b82f6"
-          icon={<Target size={14} />}
-        />
-        <CircularProgress
-          label="Easy"
-          value={stats.easy}
-          max={totalProblems || 1}
-          color="#10b981"
-          icon={<div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-        />
-        <CircularProgress
-          label="Medium"
-          value={stats.medium}
-          max={totalProblems || 1}
-          color="#f59e0b"
-          icon={<div className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-        />
-        <CircularProgress
-          label="Hard"
-          value={stats.hard}
-          max={totalProblems || 1}
-          color="#ef4444"
-          icon={<div className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
-        />
-        
-        <div className="col-span-2 md:col-span-4 lg:col-span-1 grid grid-cols-2 lg:grid-cols-1 gap-4">
-          <SmallStatCard
-            label="SOLVED TODAY"
-            value={stats.today}
-            icon={<CheckCircle2 size={16} />}
-            colorClass="text-slate-600 dark:text-slate-300"
-          />
-          <SmallStatCard
-            label="STREAK"
-            value={`${stats.streak}d`}
-            icon={<Flame size={16} />}
-            colorClass="text-orange-600 dark:text-orange-500"
-          />
+          <div className="gradient-glass p-4 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden group hover:border-rose-500/30">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest block">HARD</span>
+              <p className="text-2xl font-black font-outfit text-slate-800 dark:text-white leading-none">{stats.hard}</p>
+            </div>
+            <div className="shrink-0 scale-90 md:scale-100">
+              <CircularProgress
+                label=""
+                value={stats.hard}
+                max={totalProblems || 1}
+                color="#ef4444"
+                size={54}
+                strokeWidth={5}
+                noCard
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Streaks & Today stats */}
+        <div className="grid grid-cols-2 md:grid-cols-1 md:col-span-1 gap-4">
+          <div className="gradient-glass p-5 flex items-center justify-between relative overflow-hidden group hover:border-orange-500/30">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block">CURRENT STREAK</span>
+              <p className="text-2xl font-black font-outfit text-orange-500">{stats.streak} Days</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/15 flex items-center justify-center text-orange-500 animate-pulse">
+              <Flame size={20} className="fill-orange-500/20" />
+            </div>
+          </div>
+
+          <div className="gradient-glass p-5 flex items-center justify-between relative overflow-hidden group hover:border-emerald-500/30">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block">SOLVED TODAY</span>
+              <p className="text-2xl font-black font-outfit text-slate-800 dark:text-white">{stats.today} Problems</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center text-emerald-500">
+              <CheckCircle2 size={20} />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Unified Insights Hub with Animated Tabs */}
-      <div className="gradient-glass p-6 md:p-8 flex flex-col gap-8 border-l-4 border-emerald-500/50 relative overflow-hidden">
-        
+      <div 
+        className={`gradient-glass p-6 md:p-8 flex flex-col gap-8 border-l-4 relative overflow-hidden transition-all duration-500 ${activeTab === 'LeetCode' ? 'border-blue-500/50' : 'border-amber-500/50'}`}
+      >
         {/* Glow Effects corresponding to active tab */}
         <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full blur-[100px] transition-colors duration-1000 z-0 ${activeTab === 'LeetCode' ? 'bg-blue-500/20' : 'bg-amber-500/20'}`} />
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10 w-full">
+          {/* Left: icon + title */}
           <div className="flex items-center gap-4">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors duration-500 shadow-lg ${activeTab === 'LeetCode' ? 'bg-blue-500/10 text-blue-500 shadow-blue-500/10' : 'bg-amber-500/10 text-amber-500 shadow-amber-500/10'}`}>
               <Globe size={28} />
@@ -383,31 +493,71 @@ export default function Dashboard() {
                   ? `Unified real-time tracking. ${timeLeft}`
                   : "Connect your accounts in Profile to see automated insights"}
               </p>
+              {submissionSyncError && (
+                <p className="text-[10px] text-rose-500 font-bold mt-1">⚠️ {submissionSyncError}</p>
+              )}
             </div>
           </div>
 
-          {/* Smart Tab Switcher */}
-          {connectedPlatforms.length > 1 && (
-            <div className="flex p-1.5 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl overflow-hidden shadow-inner border border-slate-200/50 dark:border-white/[0.03]">
-              {connectedPlatforms.map(p => (
+          {/* Right: sync buttons + tab switcher */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Manual Sync Now + Reset Dismissed */}
+            {connectedPlatforms.length > 0 && (
+              <div className="flex items-center gap-2">
                 <button
-                  key={p.name}
-                  onClick={() => setActiveTab(p.name)}
-                  className={`relative px-6 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all duration-300 z-10 ${activeTab === p.name ? (p.name === 'LeetCode' ? 'text-blue-500' : 'text-amber-500') : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  onClick={handleForceSync}
+                  disabled={isSyncing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-all disabled:opacity-50"
+                  title="Force re-fetch recent submissions from LeetCode & Codeforces"
                 >
-                  {activeTab === p.name && (
-                    <motion.div 
-                      layoutId="insightTabBg" 
-                      className={`absolute inset-0 shadow-sm rounded-lg -z-10 ${p.name === 'LeetCode' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`} 
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
+                  {isSyncing ? (
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 20v-4l-3 3 3 3v-4a8 8 0 01-8-8z" className="opacity-75" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4.93 9A10 10 0 0119 15M19.07 15A10 10 0 015 9" />
+                    </svg>
                   )}
-                  {p.name}
+                  {isSyncing ? 'Syncing...' : 'Sync Now'}
                 </button>
-              ))}
-            </div>
-          )}
+                {detectedSubmissions.length === 0 && (
+                  <button
+                    onClick={clearDismissedSubmissions}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-rose-500 hover:bg-rose-500/5 transition-all"
+                    title="Clear all dismissed submissions so they can be re-detected"
+                  >
+                    Reset Dismissed
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Smart Tab Switcher */}
+            {connectedPlatforms.length > 1 && (
+              <div className="flex p-1.5 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl overflow-hidden shadow-inner border border-slate-200/50 dark:border-white/[0.03]">
+                {connectedPlatforms.map(p => (
+                  <button
+                    key={p.name}
+                    onClick={() => setActiveTab(p.name)}
+                    className={`relative px-6 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all duration-300 z-10 ${activeTab === p.name ? (p.name === 'LeetCode' ? 'text-blue-500' : 'text-amber-500') : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    {activeTab === p.name && (
+                      <motion.div 
+                        layoutId="insightTabBg" 
+                        className={`absolute inset-0 shadow-sm rounded-lg -z-10 ${p.name === 'LeetCode' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`} 
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
 
         {/* Dynamic Tab Content Area */}
         <div className="relative z-10 w-full min-h-[80px]">
@@ -436,18 +586,22 @@ export default function Dashboard() {
                     return (
                       <>
                         <div className="flex items-center gap-4 border-r border-slate-200 dark:border-white/10 pr-8">
-                          <img src={`https://leetcard.jacoblin.cool/${lcPlatform.handle}?ext=png`} className="w-12 h-12 object-cover rounded-xl shadow-sm opacity-0 absolute" />
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-lg font-black font-outfit shadow-md shadow-orange-500/20">
+                            LC
+                          </div>
                           <div>
-                            <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 tracking-tight">
                               {lcPlatform.handle}
                             </h3>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">LeetCode Member</p>
+                            <span className="text-[10px] font-extrabold bg-blue-500/10 text-blue-500 dark:text-blue-400 px-2 py-0.5 rounded-md uppercase tracking-wider mt-0.5 inline-block">
+                              LeetCode Integrated
+                            </span>
                           </div>
                         </div>
 
                         <div className="text-center border-r border-slate-200 dark:border-white/10 pr-8">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Solved</p>
-                           <p className="text-xl font-bold text-blue-500 flex items-baseline justify-center gap-1">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Platform Solved</p>
+                           <p className="text-2xl font-extrabold font-outfit text-blue-500">
                              {solved > 0 ? solved : '--'}
                            </p>
                         </div>
@@ -455,21 +609,26 @@ export default function Dashboard() {
                         {rating && (
                           <div className="text-center border-r border-slate-200 dark:border-white/10 pr-8">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contest Rating</p>
-                            <p className="text-xl font-bold text-emerald-500">{rating}</p>
+                            <p className="text-2xl font-extrabold font-outfit text-emerald-500">{rating}</p>
                           </div>
                         )}
                         
                         {rank && (
                           <div className="text-center pr-8">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Global Rank</p>
-                            <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
+                            <p className="text-2xl font-extrabold font-outfit text-slate-700 dark:text-slate-300">
                               #{rank.toLocaleString()}
                             </p>
                           </div>
                         )}
 
-                        <a href={`https://leetcode.com/${lcPlatform.handle}`} target="_blank" rel="noreferrer" className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition-colors ml-auto mr-2">
-                          <ExternalLink size={18} />
+                        <a 
+                          href={`https://leetcode.com/${lcPlatform.handle}`} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all ml-auto border border-slate-200/50 dark:border-white/[0.04]"
+                        >
+                          View Profile <ExternalLink size={12} />
                         </a>
                       </>
                     );
@@ -491,25 +650,26 @@ export default function Dashboard() {
         <div className="lg:col-span-2 space-y-6">
           {/* Urgent Revision Banner */}
           {urgentRevision.length > 0 && (
-            <div className="gradient-glass p-4 border-l-4 border-rose-500 animate-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center justify-between gap-4">
+            <div className="gradient-glass p-5 border-l-4 border-rose-500 animate-in slide-in-from-top-4 duration-500 relative overflow-hidden">
+              <div className="absolute inset-0 bg-rose-500/[0.01] pointer-events-none" />
+              <div className="flex items-center justify-between gap-4 relative z-10">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-rose-500/10 text-rose-500`}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-500/10 text-rose-500 shadow-inner">
                     <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
                       Time for Revision!
                     </h3>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
-                      You have <span className="font-bold text-rose-500">{urgentRevision.length}</span> {urgentRevision.length === 1 ? 'problem' : 'problems'} scheduled for revision. E.g. <span className="font-bold text-rose-500">"{urgentRevision[0].name}"</span>
+                      You have <span className="font-bold text-rose-500">{urgentRevision.length}</span> {urgentRevision.length === 1 ? 'problem' : 'problems'} scheduled for revision. E.g. <span className="font-semibold text-rose-500">"{urgentRevision[0].name}"</span>
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setRevisionViewerOpen(true)}
-                    className="px-4 py-1.5 rounded-lg bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-500/20 hover:bg-rose-600 transition-all whitespace-nowrap"
+                    onClick={() => setDrawerState({ open: true, problem: urgentRevision[0], initialTab: 'overview' })}
+                    className="px-4 py-1.5 rounded-xl bg-rose-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-rose-500/20 hover:bg-rose-600 transition-all whitespace-nowrap active:scale-[0.97]"
                   >
                     View Revision
                   </button>
@@ -520,14 +680,15 @@ export default function Dashboard() {
 
           {/* New Submission Banner */}
           {detectedSubmissions.length > 0 && (
-            <div className="gradient-glass p-4 border-l-4 border-brand-500 animate-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center justify-between gap-4">
+            <div className="gradient-glass p-5 border-l-4 border-brand-500 animate-in slide-in-from-top-4 duration-500 relative overflow-hidden">
+              <div className="absolute inset-0 bg-brand-500/[0.01] pointer-events-none" />
+              <div className="flex items-center justify-between gap-4 relative z-10">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500`}>
-                    <Globe size={20} className="animate-pulse" />
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-500/10 text-brand-500 shadow-inner">
+                    <Globe size={20} className="animate-pulse text-brand-500" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
                       {detectedSubmissions.length > 1 
                         ? `You solved ${detectedSubmissions.length} problems today!` 
                         : `New ${detectedSubmissions[0].platform} Submission!`}
@@ -536,36 +697,40 @@ export default function Dashboard() {
                       {detectedSubmissions.length > 1
                         ? `Track them one by one. Starting with `
                         : `You solved `}
-                      <span className="font-bold text-brand-500">"{detectedSubmissions[0].title}"</span>. Track it now?
+                      <span className="font-semibold text-brand-500">"{detectedSubmissions[0].title}"</span>. Track it now?
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => dismissSubmission(detectedSubmissions[0].titleSlug)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                   >
                     Ignore
                   </button>
                   <button 
                     onClick={() => {
                       const s = detectedSubmissions[0];
-                      setInitialModalData({
-                        name: s.title,
-                        link: s.platform === 'LeetCode' 
-                          ? `https://leetcode.com/problems/${s.titleSlug}/` 
-                          : s.platform === 'Codeforces'
-                          ? `https://codeforces.com/contest/${s.titleSlug.split('-')[0]}/problem/${s.titleSlug.split('-')[1]}`
-                          : s.platform === 'CodeChef'
-                          ? `https://www.codechef.com/problems/${s.titleSlug}`
-                          : '',
-                        platform: s.platform,
-                        difficulty: s.difficulty || 'Medium'
+                      setDrawerState({
+                        open: true,
+                        problem: null,
+                        initialTab: 'edit',
+                        initialData: {
+                          name: s.title,
+                          link: s.platform === 'LeetCode' 
+                            ? `https://leetcode.com/problems/${s.titleSlug}/` 
+                            : s.platform === 'Codeforces'
+                            ? `https://codeforces.com/contest/${s.titleSlug.split('-')[0]}/problem/${s.titleSlug.split('-')[1]}`
+                            : s.platform === 'CodeChef'
+                            ? `https://www.codechef.com/problems/${s.titleSlug}`
+                            : '',
+                          platform: s.platform,
+                          difficulty: s.difficulty || 'Medium'
+                        }
                       });
-                      setModalOpen(true);
                       dismissSubmission(s.titleSlug);
                     }}
-                    className="px-4 py-1.5 rounded-lg bg-brand-500 text-white text-xs font-bold shadow-lg shadow-brand-500/20 hover:bg-brand-600 transition-all"
+                    className="px-4 py-1.5 rounded-xl bg-brand-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-brand-500/20 hover:bg-brand-600 transition-all active:scale-[0.97]"
                   >
                     Track It
                   </button>
@@ -574,13 +739,43 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="glass-card p-5 md:p-6 flex flex-col h-[340px]">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="section-title flex items-center gap-2 mb-0">
-                <TrendingUp size={18} className="text-brand-500" />
-                Activity Overview
-              </h2>
-              <div className="flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+          <div className="gradient-glass p-5 md:p-6 flex flex-col h-[340px]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <h2 className="section-title flex items-center gap-2 mb-0">
+                  <TrendingUp size={18} className="text-brand-500" />
+                  Activity Overview
+                </h2>
+                {timeRange !== '14 Days' && (
+                  <div className="flex items-center gap-1.5 animate-in fade-in duration-300">
+                    {timeRange === 'Month' && (
+                      <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
+                        className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/[0.06] outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                      >
+                        {MONTHS.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                      className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/[0.06] outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                    >
+                      {availableYears.map((yr) => (
+                        <option key={yr} value={yr}>
+                          {yr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg self-end sm:self-auto border border-slate-200/50 dark:border-white/[0.04]">
                 {['14 Days', 'Month', 'Year'].map((btn) => (
                   <button
                     key={btn}
@@ -592,7 +787,7 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-            
+
             <div className="flex-1 w-full min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={activityData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
@@ -602,23 +797,24 @@ export default function Dashboard() {
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <XAxis 
-                    dataKey="date" 
-                    axisLine={false} 
-                    tickLine={false} 
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false}
+                    tickLine={false}
                     tick={{ fontSize: 11, fill: '#94a3b8' }}
                     dy={10}
                     minTickGap={20}
                   />
-                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,184,0.2)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="count" 
-                    stroke="#3b82f6" 
+                  <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,184,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#3b82f6"
                     strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorCount)" 
+                    fillOpacity={1}
+                    fill="url(#colorCount)"
                     activeDot={{ r: 4, strokeWidth: 0, fill: '#3b82f6' }}
+                    isAnimationActive={false}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -627,18 +823,21 @@ export default function Dashboard() {
         </div>
 
         {/* Topic Mastery */}
-        <div className="glass-card p-5 md:p-6 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="section-title mb-0">Topic Mastery</h2>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        <div className="gradient-glass p-5 md:p-6 flex flex-col h-[340px]">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-200/50 dark:border-white/[0.06] pb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen size={18} className="text-brand-500" />
+              <h2 className="text-sm font-extrabold font-outfit text-slate-900 dark:text-white uppercase tracking-wider">Topic Mastery</h2>
+            </div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-md">
               {topicProgress.length} Topics
             </span>
           </div>
 
           {topicProgress.length > 0 ? (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-2.5">
-                {topicProgress.slice(0, showAllTopics ? undefined : 6).map((topic) => {
+            <div className="flex-1 overflow-y-auto pr-1 no-scrollbar">
+              <div className="grid grid-cols-2 gap-2.5 pb-2">
+                {topicProgress.map((topic) => {
                   const total = topic.tracked || 1;
                   const solvedPct = Math.round((topic.solved / total) * 100);
 
@@ -652,41 +851,50 @@ export default function Dashboard() {
                   return (
                     <div
                       key={topic.label}
-                      className="relative overflow-hidden rounded-2xl p-3.5 border border-slate-100 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02] flex flex-col gap-2 hover:border-slate-200 dark:hover:border-white/10 transition-colors"
+                      className="group relative overflow-hidden rounded-2xl p-4 border border-slate-200/50 dark:border-white/[0.06] bg-gradient-to-br from-slate-50/50 to-white/30 dark:from-white/[0.02] dark:to-white/[0.005] flex flex-col gap-3.5 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:border-slate-300 dark:hover:border-white/10"
                     >
-                      {/* Faint glow blob */}
+                      {/* Background pattern */}
+                      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
+                      
+                      {/* Hover glow blob */}
                       <div
-                        className="absolute -right-4 -top-4 w-16 h-16 rounded-full blur-2xl opacity-40"
+                        className="absolute -right-4 -top-4 w-16 h-16 rounded-full blur-2xl opacity-20 group-hover:opacity-40 group-hover:scale-125 transition-all duration-500"
                         style={{ backgroundColor: pctColor }}
                       />
 
-                      {/* Top: name + percentage — stacked to handle long names gracefully */}
-                      <div className="flex flex-col gap-0.5 relative z-10 min-w-0">
-                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 leading-tight truncate w-full" title={topic.label}>
-                          {topic.label}
-                        </span>
+                      {/* Header details */}
+                      <div className="flex items-start justify-between gap-3 relative z-10 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200/20 dark:border-white/[0.04] flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform duration-300">
+                            {getTopicIcon(topic.label)}
+                          </div>
+                          <span className="text-[12px] font-bold text-slate-800 dark:text-slate-200 leading-tight truncate w-full" title={topic.label}>
+                            {topic.label}
+                          </span>
+                        </div>
                         <span
-                          className="text-base font-black leading-none"
+                          className="text-[15px] font-black leading-none font-outfit"
                           style={{ color: pctColor }}
                         >
                           {solvedPct}%
                         </span>
                       </div>
 
-                      {/* Progress fill bar */}
-                      <div className="relative h-1.5 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden z-10">
+                      {/* Glowing progress line */}
+                      <div className="relative h-2 w-full rounded-full bg-slate-200/50 dark:bg-white/[0.06] overflow-hidden z-10 shadow-inner">
                         <div
                           className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
                           style={{
                             width: `${solvedPct}%`,
-                            background: `linear-gradient(90deg, ${pctColor}cc, ${pctColor})`
+                            background: `linear-gradient(90deg, ${pctColor}88, ${pctColor})`,
+                            boxShadow: `0 0 8px ${pctColor}55`
                           }}
                         />
                       </div>
 
-                      {/* Bottom: status dots + count */}
-                      <div className="flex items-center justify-between relative z-10">
-                        <div className="flex items-center gap-1">
+                      {/* Footer tags */}
+                      <div className="flex items-center justify-between relative z-10 text-[10px] text-slate-500">
+                        <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-slate-200/10 dark:border-white/[0.04]">
                           {topic.solved > 0 && (
                             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: BAR_COLORS.solved }} title="Solved" />
                           )}
@@ -699,26 +907,19 @@ export default function Dashboard() {
                           {topic.others > 0 && (
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" title="Not Started" />
                           )}
+                          <span className="font-bold text-[9px] dark:text-slate-400 uppercase leading-none ml-1">Breakdown</span>
                         </div>
-                        <span className="text-[10px] font-black text-slate-400 tabular-nums">
-                          {topic.solved}/{topic.tracked}
+                        <span className="font-extrabold text-[11px] tabular-nums font-outfit dark:text-slate-400">
+                          {topic.solved} <span className="font-bold text-slate-500">/ {topic.tracked}</span>
                         </span>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {topicProgress.length > 6 && (
-                <button
-                  onClick={() => setShowAllTopics(!showAllTopics)}
-                  className="mt-1 w-full py-1.5 rounded-xl bg-slate-100 dark:bg-white/[0.04] hover:bg-slate-200 dark:hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-colors"
-                >
-                  {showAllTopics ? 'Show Less' : `Show All (${topicProgress.length})`}
-                </button>
-              )}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-400 dark:text-slate-600 text-center mt-10">
+            <p className="text-sm font-medium text-slate-400 dark:text-slate-600 text-center my-auto">
               Add problems with topics to see your breakdown.
             </p>
           )}
@@ -726,30 +927,15 @@ export default function Dashboard() {
         
       </div>
 
-      <ProblemModal 
-        open={modalOpen} 
-        onClose={() => { setModalOpen(false); setEditProblem(null); setInitialModalData(null); }} 
-        initialData={initialModalData} 
-        editProblem={editProblem}
+      <ProblemDrawer
+        open={drawerState.open}
+        onClose={() => setDrawerState({ open: false, problem: null, initialTab: 'overview', initialData: null })}
+        problem={drawerState.problem}
+        initialTab={drawerState.initialTab}
+        initialData={drawerState.initialData}
       />
-      
-      {urgentRevision.length > 0 && (
-        <ProblemViewerModal 
-          open={revisionViewerOpen} 
-          onClose={() => setRevisionViewerOpen(false)} 
-          problem={urgentRevision[0]} 
-          onEdit={(p) => {
-             setRevisionViewerOpen(false);
-             setEditProblem(p);
-             setModalOpen(true);
-          }}
-        />
-      )}
 
-      <DailyWheelModal 
-        open={dailyModalOpen} 
-        onClose={() => setDailyModalOpen(false)} 
-      />
+
       <MilestoneModal
         open={milestoneModalOpen}
         onClose={() => setMilestoneModalOpen(false)}
@@ -783,9 +969,9 @@ function SmallStatCard({ label, value, icon, colorClass }) {
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/[0.08] shadow-bento px-3 py-2 rounded-lg text-sm flex flex-col gap-1">
-        <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">{label}</span>
-        <span className="text-slate-900 dark:text-white font-bold">{payload[0].value} Solved</span>
+      <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border border-white/[0.08] shadow-2xl px-3 py-2 rounded-xl text-xs flex flex-col gap-0.5 text-white">
+        <span className="text-slate-400 font-medium">{label}</span>
+        <span className="font-extrabold text-sm text-brand-400">{payload[0].value} Solved</span>
       </div>
     );
   }

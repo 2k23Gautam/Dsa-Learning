@@ -10,8 +10,8 @@ export default function TopBar({ onMenuClick }) {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
 
   return (
-    <header className="shrink-0 bg-white/80 dark:bg-[#0b101a]/80 backdrop-blur-xl
-                       border-b border-slate-200 dark:border-white/[0.06]
+    <header className="shrink-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl
+                       border-b border-slate-200 dark:border-white/[0.04]
                        px-4 md:px-6 lg:px-8 py-3 flex items-center justify-between gap-4
                        z-20 transition-all duration-300 sticky top-0">
       
@@ -51,7 +51,7 @@ export default function TopBar({ onMenuClick }) {
         />
       </div>
 
-      {/* Right — logout button */}
+      {/* Right — logout */}
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={logout}

@@ -31,13 +31,16 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   const { authUser, updateAuthUser, token } = useAuth();
   const [problems, setProblems] = useState([]);
+  const [problemsLoading, setProblemsLoading] = useState(true);
 
   useEffect(() => {
     if (!token) {
       setProblems([]);
+      setProblemsLoading(false);
       return;
     }
     const fetchProblems = async () => {
+      setProblemsLoading(true);
       try {
         const res = await fetch(`${API_BASE_URL}/api/problems`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -48,6 +51,8 @@ export function StoreProvider({ children }) {
         }
       } catch (err) {
         console.error('Failed to fetch problems', err);
+      } finally {
+        setProblemsLoading(false);
       }
     };
     fetchProblems();
@@ -177,7 +182,7 @@ export function StoreProvider({ children }) {
   // ── Derived stats ─────────────────────────────────────────────────────────
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: problems.length,
     easy: problems.filter(p => p.difficulty === 'Easy').length,
     medium: problems.filter(p => p.difficulty === 'Medium').length,
@@ -186,7 +191,7 @@ export function StoreProvider({ children }) {
     today: problems.filter(p => p.dateSolved && p.dateSolved.substring(0, 10) === todayStr).length,
     needsRevision: problems.filter(p => p.status === 'Needs Revision').length,
     streak: calcStreak(problems),
-  };
+  }), [problems, todayStr]);
 
   const activityData = useMemo(() => {
     const data = [];
@@ -203,6 +208,7 @@ export function StoreProvider({ children }) {
 
   // ── Global Activity Detection ───────────────────────────────────────────
   const [rawAllSubmissions, setRawAllSubmissions] = useState([]);
+  const [submissionSyncError, setSubmissionSyncError] = useState(null);
   const [dismissedSlugs, setDismissedSlugs] = useState(() => {
     try { return JSON.parse(localStorage.getItem(DISMISSED_KEY)) || []; } catch { return []; }
   });
@@ -227,67 +233,77 @@ export function StoreProvider({ children }) {
        return;
     }
 
-    try {
-      let combined = [];
+    setSubmissionSyncError(null);
+    let combined = [];
+    let hasError = false;
 
-      // 1. LeetCode
-      if (authUser?.leetcodeUsername) {
+    // 1. LeetCode
+    if (authUser?.leetcodeUsername) {
+      try {
         const res = await fetch(`${API_BASE_URL}/api/leetcode/recent/${authUser.leetcodeUsername}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const recent = await res.json();
-          combined = [...combined, ...recent.map(s => ({ ...s, platform: 'LeetCode' }))];
-        }
-      }
-
-      // 2. Codeforces - fetch recent AC submissions from their public API
-      if (authUser?.codeforcesHandle) {
-        try {
-          const cfRes = await fetch(
-            `https://codeforces.com/api/user.status?handle=${authUser.codeforcesHandle}&from=1&count=30`
-          );
-          if (cfRes.ok) {
-            const cfJson = await cfRes.json();
-            if (cfJson.status === 'OK') {
-              const acSubmissions = cfJson.result
-                .filter(s => s.verdict === 'OK')
-                .map(s => ({
-                  platform: 'Codeforces',
-                  title: s.problem.name,
-                  titleSlug: `${s.problem.contestId}-${s.problem.index}`,
-                  timestamp: s.creationTimeSeconds * 1000,
-                  difficulty: s.problem.rating
-                    ? s.problem.rating < 1400 ? 'Easy' : s.problem.rating < 2000 ? 'Medium' : 'Hard'
-                    : 'Medium',
-                }));
-              combined = [...combined, ...acSubmissions];
-            }
+          if (Array.isArray(recent)) {
+            combined = [...combined, ...recent.map(s => ({ ...s, platform: 'LeetCode' }))];
+            console.log(`[Tracker] LeetCode: fetched ${recent.length} recent AC submissions`);
+          } else {
+            console.warn('[Tracker] LeetCode recent returned non-array:', recent);
           }
-        } catch (cfErr) {
-          console.warn('CF submission fetch failed:', cfErr);
+        } else {
+          const errText = await res.text();
+          console.warn(`[Tracker] LeetCode recent fetch failed (${res.status}):`, errText);
+          hasError = true;
         }
+      } catch (lcErr) {
+        console.warn('[Tracker] LeetCode fetch error:', lcErr.message);
+        hasError = true;
       }
-
-      setRawAllSubmissions(combined);
-      setLastSyncTime(Date.now());
-    } catch (err) {
-      console.error('Detection error:', err);
     }
-  }, [token, authUser, lastSyncTime]);
+
+    // 2. Codeforces - fetch recent AC submissions from backend proxy
+    if (authUser?.codeforcesHandle) {
+      try {
+        const cfRes = await fetch(`${API_BASE_URL}/api/codeforces/recent/${authUser.codeforcesHandle}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (cfRes.ok) {
+          const acSubmissions = await cfRes.json();
+          if (Array.isArray(acSubmissions)) {
+            combined = [...combined, ...acSubmissions];
+            console.log(`[Tracker] Codeforces: fetched ${acSubmissions.length} recent AC submissions`);
+          } else {
+            console.warn('[Tracker] Codeforces recent returned non-array:', acSubmissions);
+          }
+        } else {
+          console.warn(`[Tracker] Codeforces fetch failed (${cfRes.status})`);
+          hasError = true;
+        }
+      } catch (cfErr) {
+        console.warn('[Tracker] CF submission fetch error:', cfErr.message);
+        hasError = true;
+      }
+    }
+
+    console.log(`[Tracker] Total raw submissions: ${combined.length}, dismissed: ${dismissedSlugs.length}`);
+    setRawAllSubmissions(combined);
+    setLastSyncTime(Date.now());
+    if (hasError && combined.length === 0) {
+      setSubmissionSyncError('Could not reach LeetCode/Codeforces API. Check server logs.');
+    }
+  }, [token, authUser, lastSyncTime, dismissedSlugs]);
 
   const detectedSubmissions = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTimestamp = today.getTime();
+    const detectionRangeLimit = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+    const rangeStartTime = Date.now() - detectionRangeLimit;
 
     return rawAllSubmissions.filter(rs => {
       // Normalize timestamp to milliseconds
-      // LeetCode returns epoch in seconds; CF already stored as ms (we multiplied ×1000 above)
       const rawTs = parseInt(rs.timestamp);
       const tsMs = rawTs > 1_000_000_000_000 ? rawTs : rawTs * 1000;
 
-      if (tsMs < todayTimestamp) return false;
+      if (tsMs < rangeStartTime) return false;
       if (dismissedSlugs.includes(rs.titleSlug)) return false;
 
       // Deduplicate against already-tracked problems
@@ -306,8 +322,10 @@ export function StoreProvider({ children }) {
                 linkMatch = paths.some(seg => seg.toLowerCase() === rs.titleSlug.toLowerCase());
               }
             } else if (rs.platform === 'Codeforces') {
+              const slugParts = rs.titleSlug.split('-'); // [contestId, index]
               linkMatch = p.link.includes(`codeforces.com`) &&
-                paths.some(seg => seg.toLowerCase() === rs.titleSlug.split('-')[1]?.toLowerCase());
+                paths.includes(slugParts[0]) &&
+                paths.includes(slugParts[1]);
             }
           } catch {
             linkMatch = p.link.toLowerCase().includes(rs.titleSlug.toLowerCase());
@@ -352,6 +370,24 @@ export function StoreProvider({ children }) {
           }
         }
       }
+
+      if (user?.codeforcesHandle) {
+        const res = await fetch(`${API_BASE_URL}/api/codeforces/stats/${user.codeforcesHandle}`, {
+          headers: { 'Authorization': `Bearer ${tok}` }
+        });
+        if (res.ok) {
+          const stats = await res.json();
+          const syncRes = await fetch(`${API_BASE_URL}/api/codeforces/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+            body: JSON.stringify({ codeforcesHandle: user.codeforcesHandle, stats })
+          });
+          if (syncRes.ok) {
+            const data = await syncRes.json();
+            if (data.user) updateAuthUser(data.user);
+          }
+        }
+      }
     } catch (err) {
       console.error('Auto-sync error:', err);
     } finally {
@@ -378,14 +414,29 @@ export function StoreProvider({ children }) {
     setDismissedSlugs(prev => [...prev, titleSlug]);
   };
 
-  const value = {
-    problems, addProblem, updateProblem, deleteProblem,
+  const clearDismissedSubmissions = () => {
+    setDismissedSlugs([]);
+    localStorage.removeItem(DISMISSED_KEY);
+    console.log('[Tracker] Cleared all dismissed slugs');
+  };
+
+  const value = useMemo(() => ({
+    problems, addProblem, updateProblem, deleteProblem, problemsLoading,
     theme, toggleTheme,
     stats, todayStr, activityData,
     filters, setFilter, togglePOTD, setDateRange, authUser,
     detectedSubmissions, dismissSubmission, checkGlobalSubmissions,
+    clearDismissedSubmissions, submissionSyncError,
     syncAllPlatformStats, lastSyncTime
-  };
+  }), [
+    problems, addProblem, updateProblem, deleteProblem, problemsLoading,
+    theme, toggleTheme,
+    stats, todayStr, activityData,
+    filters, setFilter, togglePOTD, setDateRange, authUser,
+    detectedSubmissions, dismissSubmission, checkGlobalSubmissions,
+    clearDismissedSubmissions, submissionSyncError,
+    syncAllPlatformStats, lastSyncTime
+  ]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

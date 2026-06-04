@@ -12,8 +12,10 @@ const userSchema = new mongoose.Schema({
     type: Object, 
     default: {
       leetcode: null,
+      codeforces: null,
     }
   },
+  codeforcesStats: { type: Object, default: null },
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   sentRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   friendRequests: [{
