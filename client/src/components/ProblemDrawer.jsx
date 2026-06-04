@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const initialState = {
   name: '', link: '', platform: '', difficulty: 'Easy', topics: [], patterns: [],
   status: 'Solved', dateSolved: '', timeComplexity: '', spaceComplexity: '',
-  approach: '', notes: '', solutionCode: '', revisionCount: 0, isPOTD: false
+  approach: '', notes: '', solutionCode: '', problemStatement: '', revisionCount: 0, isPOTD: false
 };
 
 export default function ProblemDrawer({ open, onClose, problem = null, initialTab = 'overview', initialData = null }) {
@@ -28,7 +28,6 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Statement fetching
-  const [fetchedStatement, setFetchedStatement] = useState('');
   const [statementStatus, setStatementStatus] = useState('idle'); // idle | fetching | success | error
   const fetchDebounceRef = useRef(null);
 
@@ -64,7 +63,6 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
         setIsEditingCode(false);
         setActiveTab('edit');
       }
-      setFetchedStatement('');
       setStatementStatus('idle');
     }
   }, [open, problem, initialTab, initialData]);
@@ -90,7 +88,6 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
     const isCodeforces = /codeforces\.com\/(contest|problemset)\//i.test(link);
     
     if (!isLeetCode && !isCodeforces) {
-      setFetchedStatement('');
       setStatementStatus('idle');
       return;
     }
@@ -113,21 +110,17 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
         }
 
         const data = await res.json();
-        setFetchedStatement(data.statement || '');
+        setFormData(prev => ({
+          ...prev,
+          problemStatement: data.statement || prev.problemStatement || '',
+          difficulty: data.difficulty || prev.difficulty,
+          name: prev.name || data.title
+        }));
         setStatementStatus('success');
-
-        if (!formData.name && data.title) {
-          setFormData(prev => ({
-            ...prev,
-            difficulty: data.difficulty || prev.difficulty,
-            name: prev.name || data.title
-          }));
-        }
 
         toast.success('Problem statement fetched! AI will use it for analysis.', { icon: '📄' });
       } catch (err) {
         console.warn('[Statement Fetch]', err.message);
-        setFetchedStatement('');
         setStatementStatus('error');
       }
     }, 800);
@@ -150,7 +143,7 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
           name: formData.name,
           link: formData.link,
           solutionCode: formData.solutionCode,
-          problemStatement: fetchedStatement || ''
+          problemStatement: formData.problemStatement || ''
         })
       });
 
@@ -171,7 +164,7 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
         approach: suggestions.suggestedApproach || prev.approach
       }));
 
-      toast.success(fetchedStatement ? '✨ AI analyzed code + statement!' : '✨ Suggestions populated from AI!');
+      toast.success(formData.problemStatement ? '✨ AI analyzed code + statement!' : '✨ Suggestions populated from AI!');
     } catch (err) {
       toast.error(err.message || 'AI Extraction failed');
     } finally {
@@ -366,6 +359,16 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
                     </div>
                   </div>
 
+                  {/* Problem Statement */}
+                  {formData.problemStatement && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Problem Statement</span>
+                      <div className="bg-white dark:bg-white/[0.02] p-5 rounded-2xl border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-700 dark:text-slate-300 leading-relaxed overflow-x-auto no-scrollbar max-h-[300px]">
+                        <MarkdownRenderer content={formData.problemStatement} />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Notes / Learnings */}
                   {formData.notes && (
                     <div className="space-y-2">
@@ -464,9 +467,21 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
                 </div>
               )}
 
-              {/* Tab 4: Edit Details */}
+               {/* Tab 4: Edit Details */}
               {activeTab === 'edit' && (
                 <form id="problem-drawer-form" onSubmit={handleSubmit} className="space-y-6">
+                  {/* Problem Description & Statement */}
+                  <div className="space-y-3">
+                    <h3 className="section-title text-xs border-l-2 border-brand-500 pl-2 mb-0">Problem Statement</h3>
+                    <textarea
+                      rows="6"
+                      className="input-field text-xs py-2.5 resize-y leading-relaxed"
+                      placeholder="Paste problem description, examples, and constraints here..."
+                      value={formData.problemStatement || ''}
+                      onChange={e => setFormData({ ...formData, problemStatement: e.target.value })}
+                    />
+                  </div>
+
                   {/* Solution Code */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">

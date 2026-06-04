@@ -29,6 +29,98 @@ const MONTHS = [
   { value: 10, label: 'Nov' },
   { value: 11, label: 'Dec' },
 ];
+const MOTIVATIONAL_QUOTES = [
+  {
+    quote: "It is not that we have a short time to live, but that we waste a lot of it. The greatest obstacle to living is expectancy, which hangs upon tomorrow and loses today.",
+    author: "Seneca",
+    tag: "Life & Focus"
+  },
+  {
+    quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+    author: "Aristotle",
+    tag: "Habit"
+  },
+  {
+    quote: "The secret of change is to focus all of your energy, not on fighting the old, but on building the new.",
+    author: "Socrates",
+    tag: "Focus"
+  },
+  {
+    quote: "It does not matter how slowly you go as long as you do not stop.",
+    author: "Confucius",
+    tag: "Consistency"
+  },
+  {
+    quote: "Our greatest glory is not in never falling, but in rising every time we fall.",
+    author: "Confucius",
+    tag: "Resilience"
+  },
+  {
+    quote: "The only way to do great work is to love what you do.",
+    author: "Steve Jobs",
+    tag: "Hard Work"
+  },
+  {
+    quote: "In the middle of difficulty lies opportunity.",
+    author: "Albert Einstein",
+    tag: "Growth"
+  },
+  {
+    quote: "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+    author: "Winston Churchill",
+    tag: "Perseverance"
+  },
+  {
+    quote: "The best way to predict the future is to create it.",
+    author: "Abraham Lincoln",
+    tag: "Action"
+  },
+  {
+    quote: "He who has a why to live can bear almost any how.",
+    author: "Friedrich Nietzsche",
+    tag: "Purpose"
+  },
+  {
+    quote: "You have power over your mind - not outside events. Realize this, and you will find strength.",
+    author: "Marcus Aurelius",
+    tag: "Mindset"
+  },
+  {
+    quote: "The happiness of your life depends upon the quality of your thoughts.",
+    author: "Marcus Aurelius",
+    tag: "Perspective"
+  },
+  {
+    quote: "Small daily improvements over time lead to stunning results.",
+    author: "Robin Sharma",
+    tag: "Progress"
+  },
+  {
+    quote: "Excellence is never an accident. It is always the result of high intention, sincere effort, and intelligent execution.",
+    author: "Aristotle",
+    tag: "Excellence"
+  },
+  {
+    quote: "Do what you can, with what you have, where you are.",
+    author: "Theodore Roosevelt",
+    tag: "Action"
+  },
+  {
+    quote: "Believe you can and you're halfway there.",
+    author: "Theodore Roosevelt",
+    tag: "Belief"
+  },
+  {
+    quote: "We must all suffer one of two things: the pain of discipline or the pain of regret. The difference is discipline weighs ounces while regret weighs tons.",
+    author: "Jim Rohn",
+    tag: "Discipline"
+  },
+  {
+    quote: "What we get by achieving our goals is not as important as what we become by achieving our goals.",
+    author: "Henry David Thoreau",
+    tag: "Growth"
+  }
+];
 
 const getTopicIcon = (topic) => {
   const t = topic.toLowerCase();
@@ -48,6 +140,17 @@ export default function Dashboard() {
   const { authUser } = useAuth();
   const [timeRange, setTimeRange] = useState('14 Days');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const dailyQuote = useMemo(() => {
+    const today = new Date();
+    const dateKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+    let hash = 0;
+    for (let i = 0; i < dateKey.length; i++) {
+      hash = dateKey.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const idx = Math.abs(hash) % MOTIVATIONAL_QUOTES.length;
+    return MOTIVATIONAL_QUOTES[idx];
+  }, []);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [drawerState, setDrawerState] = useState({ open: false, problem: null, initialTab: 'overview', initialData: null });
@@ -247,6 +350,48 @@ export default function Dashboard() {
               </div>
               <Flame size={20} className="text-orange-500 animate-pulse fill-orange-500/20" />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Daily Motivation & Mindset Card */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 dark:border-white/[0.05] bg-gradient-to-r from-slate-50 to-slate-100/80 dark:from-[#0b0f19] dark:to-[#070a12] p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-6 shadow-sm hover:shadow-md transition-all duration-300 group">
+        
+        {/* Decorative background glow */}
+        <div className="absolute -right-16 -top-16 w-36 h-36 rounded-full bg-brand-500/[0.04] dark:bg-brand-500/10 blur-3xl pointer-events-none group-hover:scale-110 transition-transform duration-500" />
+        
+        {/* Large stylised quotes overlay symbol */}
+        <span className="absolute -top-1 left-2 text-slate-200/50 dark:text-white/[0.02] text-8xl font-serif select-none pointer-events-none font-bold">
+          “
+        </span>
+
+        {/* Icon container */}
+        <div className="w-12 h-12 rounded-2xl bg-brand-500/10 dark:bg-brand-500/20 flex items-center justify-center text-brand-500 border border-brand-500/20 dark:border-brand-500/30 shrink-0 shadow-inner group-hover:rotate-12 transition-transform duration-300">
+          <Sparkles size={22} className="animate-pulse text-brand-600 dark:text-brand-400" />
+        </div>
+
+        {/* Text Details */}
+        <div className="space-y-4 flex-1 text-center md:text-left relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 bg-brand-500/5 dark:bg-brand-500/10 px-2.5 py-1 rounded-lg w-fit mx-auto md:mx-0">
+              Daily Wisdom & Progress
+            </span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-200/60 dark:bg-white/[0.04] text-slate-500 dark:text-slate-400 font-extrabold uppercase tracking-widest border border-slate-300/40 dark:border-white/[0.02] w-fit mx-auto md:mx-0">
+              {dailyQuote.tag}
+            </span>
+          </div>
+
+          <blockquote className="relative">
+            <p className="text-base md:text-lg font-medium font-outfit text-slate-700 dark:text-slate-200 leading-relaxed italic max-w-3xl">
+              "{dailyQuote.quote}"
+            </p>
+          </blockquote>
+
+          <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
+            <div className="w-6 h-px bg-slate-300 dark:bg-white/10" />
+            <span className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-extrabold tracking-wide">
+              {dailyQuote.author}
+            </span>
           </div>
         </div>
       </div>

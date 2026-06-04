@@ -14,6 +14,7 @@ const problemSchema = new mongoose.Schema({
   timeComplexity: { type: String },
   spaceComplexity: { type: String },
   solutionCode: { type: String },
+  problemStatement: { type: String },
   revisionDate: { type: String },
   dateSolved: { type: String },
   revisionCount: { type: Number, default: 0 },

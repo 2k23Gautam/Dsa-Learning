@@ -34,7 +34,7 @@ Analyze BOTH the problem statement and the user's solution code. Extract the fol
 - **difficulty**: "Easy", "Medium", or "Hard".
 - **timeComplexity**: Strictly Big-O notation, e.g. "O(n)".
 - **spaceComplexity**: Strictly Big-O notation, e.g. "O(1)".
-- **suggestedApproach**: A detailed, highly-structured markdown explanation. Ensure the output feels modern and premium by using blockquotes (\`>\`) for the main intuition, numbered lists with bolded action names, horizontal rules (\`---\`) for sectioning, and a clean Markdown Table for the Complexity breakdown. You MUST output this EXACT visually advanced layout:
+- **suggestedApproach**: A detailed, highly-structured markdown explanation. Ensure the output feels modern and premium. It must guide the user on how to think, build intuition, and arrive at the solution step-by-step. You MUST output this EXACT visually advanced layout:
 
 ## Output Format
 You MUST structure your response EXACTLY like this (JSON first, then the Markdown approach between delimiters):
@@ -47,31 +47,54 @@ You MUST structure your response EXACTLY like this (JSON first, then the Markdow
   "spaceComplexity": "O(1)"
 }
 ===APPROACH_START===
-> ### Core Intuition
-> [Write an insightful 2-3 sentence summary of the core logic doing the heavy lifting]
+# Intuition
+
+### The Brute Force Thought
+Explain the initial, most straightforward thought process/brute-force approach and why it is suboptimal (e.g. mention its complexity limits).
 
 ---
 
-### Step-by-Step Execution
-
-1. **[Action Name]:** [Detailed step explanation...]
-2. **[Action Name]:** [Detailed step explanation...]
+### The Key Mental Shift
+Detail the core observation, key insight, or question the solver should ask themselves to optimize the solution. Use blockquotes (\`>\`) for key questions/thoughts (e.g., \`> "What if we did..."\`).
 
 ---
 
-### Identifying Patterns
-
-- **Algorithmic Pattern:** \`[Pattern 1]\`
-- **Core Topics:** \`[Topic 1]\`, \`[Topic 2]\`
+### How the Optimized Solution Works
+Break down the step-by-step logic of how to build, traverse, or compute the optimized solution.
 
 ---
 
-### Complexity Analysis
+### Why it Works & is Optimal
+Explain why this optimized approach is correct and why it runs within the expected complexity bounds.
 
-| Type | Big-O | Explanation |
-| :--- | :--- | :--- |
-| **Time** | **\`O(n)\`** | [1-sentence reason, e.g., Single pass through the array] |
-| **Space** | **\`O(1)\`** | [1-sentence reason, e.g., Only constant extra variables used] |
+---
+
+### Final Insight
+> [Provide a concise, memorable key takeaway sentence that generalizes the lesson learned here]
+
+---
+
+# Pattern
+
+* [Pattern 1, e.g. Binary Search on Partition]
+* [Pattern 2]
+
+# Topics Used
+
+* [Topic 1, e.g. Arrays]
+* [Topic 2]
+
+# Time Complexity
+
+\`\`\`cpp
+[Strictly Big-O notation, e.g. O(log(min(n1,n2)))]
+\`\`\`
+
+# Space Complexity
+
+\`\`\`cpp
+[Strictly Big-O notation, e.g. O(1)]
+\`\`\`
 ===APPROACH_END===
 `;
 

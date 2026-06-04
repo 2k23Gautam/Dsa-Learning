@@ -39,7 +39,7 @@ router.get('/', auth, async (req, res) => {
 // Sanitize body: coerce any string-typed fields that accidentally came as arrays
 function sanitizeBody(body) {
   const STRING_FIELDS = ['name', 'link', 'platform', 'difficulty', 'status', 'approach',
-    'notes', 'solutionCode', 'timeComplexity', 'spaceComplexity',
+    'notes', 'solutionCode', 'problemStatement', 'timeComplexity', 'spaceComplexity',
     'dateSolved', 'revisionDate'];
   const cleaned = { ...body };
   for (const field of STRING_FIELDS) {
