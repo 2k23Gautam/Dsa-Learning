@@ -5,11 +5,17 @@
 @tailwind utilities;
 
 .markdown-body {
-  @apply text-slate-800 dark:text-slate-200 text-[14px] leading-relaxed break-words;
+  @apply text-[13.5px] leading-relaxed text-slate-700 dark:text-slate-300 font-sans tracking-wide break-words;
 }
-.markdown-body p { margin-bottom: 0.85em; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3 { 
-  @apply font-bold mt-5 mb-3 text-slate-900 dark:text-white font-outfit tracking-tight flex items-center gap-2; 
+.markdown-body p { margin-bottom: 0.95em; }
+.markdown-body h1 {
+  @apply font-black text-lg mt-6 mb-3 text-slate-900 dark:text-white font-outfit tracking-tight border-b border-slate-200 dark:border-white/[0.06] pb-2 flex items-center gap-2;
+}
+.markdown-body h2 {
+  @apply font-extrabold text-base mt-6 mb-3 text-slate-900 dark:text-white font-outfit tracking-tight border-b border-slate-200/50 dark:border-white/[0.04] pb-2 flex items-center gap-2;
+}
+.markdown-body h3 {
+  @apply font-extrabold text-[13px] uppercase tracking-widest text-brand-600 dark:text-brand-400 mt-6 mb-3 flex items-center gap-2 border-l-[3px] border-brand-500 pl-2.5;
 }
 .markdown-body ul { @apply list-disc pl-5 mb-4 space-y-1.5; }
 .markdown-body ol { @apply list-decimal pl-5 mb-4 space-y-1.5; }
@@ -294,4 +300,46 @@
 .dark .glow-card-rose {
   background: radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.12) 0%, transparent 65%), 
               linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.005) 100%);
+}
+
+/* ── HUD / AI Scanner Animations ── */
+@keyframes laser {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 100%; opacity: 0.8; }
+  100% { top: 0%; opacity: 0.8; }
+}
+.animate-laser {
+  animation: laser 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 10s linear infinite;
+}
+
+@keyframes spin-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+.animate-spin-reverse {
+  animation: spin-reverse 6s linear infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.06); opacity: 1; filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.4)); }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+@keyframes marquee-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.animate-marquee-progress {
+  animation: marquee-progress 1.5s infinite linear;
 }

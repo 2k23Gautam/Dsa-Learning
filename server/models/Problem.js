@@ -21,4 +21,6 @@ const problemSchema = new mongoose.Schema({
   isPOTD: { type: Boolean, default: false }
 }, { timestamps: true });
 
+problemSchema.index({ user: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Problem', problemSchema);

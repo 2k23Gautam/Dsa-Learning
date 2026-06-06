@@ -142,9 +142,13 @@ async function fetchCodeChefContests() {
   }
 }
 
-let cachedContests = null;
-let lastContestFetchTime = 0;
-const CONTEST_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+let platformCache = {
+  LeetCode: { data: [], lastFetch: 0 },
+  Codeforces: { data: [], lastFetch: 0 },
+  CodeChef: { data: [], lastFetch: 0 }
+};
+const CACHE_TTL_SUCCESS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_FAILURE = 2 * 60 * 1000;  // 2 minutes retry
 
 // @route   GET /api/platforms/contests
 router.get('/contests', auth, async (req, res) => {
@@ -152,39 +156,58 @@ router.get('/contests', auth, async (req, res) => {
     const user = await User.findById(req.user.id).select('dismissedContests');
     const dismissed = user?.dismissedContests || [];
 
-    const now = new Date();
-    const nowTime = now.getTime();
+    const nowTime = Date.now();
     // Show contests starting within the next 48 hours
     const windowEndTime = nowTime + (48 * 60 * 60 * 1000);
 
-    if (!cachedContests || nowTime - lastContestFetchTime > CONTEST_CACHE_TTL) {
-      // Fetch from LeetCode, Codeforces, and CodeChef in parallel
-      const [leetcode, codeforces, codechef] = await Promise.all([
-        fetchLeetCodeContests(),
-        fetchCodeforcesContests(),
-        fetchCodeChefContests()
-      ]);
+    const getPlatformContests = async (platformName, fetchFn) => {
+      const cache = platformCache[platformName];
+      const age = nowTime - cache.lastFetch;
+      const needsFetch = !cache.data || cache.data.length === 0
+        ? age > CACHE_TTL_FAILURE
+        : age > CACHE_TTL_SUCCESS;
 
-      // Merge and deduplicate by platform+name
-      const seen = new Set();
-      const merged = [];
-      for (const c of [...leetcode, ...codeforces, ...codechef]) {
-        const dedupKey = `${c.platform}|${c.name}`;
-        if (!seen.has(dedupKey)) {
-          seen.add(dedupKey);
-          merged.push(c);
+      if (needsFetch) {
+        try {
+          const freshData = await fetchFn();
+          if (freshData && freshData.length > 0) {
+            platformCache[platformName] = { data: freshData, lastFetch: nowTime };
+            return freshData;
+          } else {
+            // Keep existing cache if any, but scheduled for rapid retry
+            cache.lastFetch = nowTime - (CACHE_TTL_SUCCESS - CACHE_TTL_FAILURE);
+          }
+        } catch (err) {
+          console.error(`[Cache Refresh] ${platformName} failed:`, err.message);
+          cache.lastFetch = nowTime - (CACHE_TTL_SUCCESS - CACHE_TTL_FAILURE);
         }
       }
-      
-      cachedContests = merged;
-      lastContestFetchTime = nowTime;
-      console.log(`[Cache Updated] Fetched Contests (LC=${leetcode.length}, CF=${codeforces.length}, CC=${codechef.length})`);
+      return cache.data || [];
+    };
+
+    // Fetch platforms in parallel using respective caches
+    const [leetcode, codeforces, codechef] = await Promise.all([
+      getPlatformContests('LeetCode', fetchLeetCodeContests),
+      getPlatformContests('Codeforces', fetchCodeforcesContests),
+      getPlatformContests('CodeChef', fetchCodeChefContests)
+    ]);
+
+    // Merge and deduplicate by platform+name
+    const seen = new Set();
+    const merged = [];
+    for (const c of [...leetcode, ...codeforces, ...codechef]) {
+      const dedupKey = `${c.platform}|${c.name}`;
+      if (!seen.has(dedupKey)) {
+        seen.add(dedupKey);
+        merged.push(c);
+      }
     }
 
-    const filtered = cachedContests.filter(c => {
-      const isUpcoming = c.startTime > nowTime && c.startTime <= windowEndTime;
+    const filtered = merged.filter(c => {
+      // Show contests that end in the future, and start within the 48h window (or active)
+      const isUpcomingOrActive = c.endTime > nowTime && c.startTime <= windowEndTime;
       const isDismissed = dismissed.includes(c.id);
-      return isUpcoming && !isDismissed;
+      return isUpcomingOrActive && !isDismissed;
     });
 
     return res.json(filtered.sort((a, b) => a.startTime - b.startTime));

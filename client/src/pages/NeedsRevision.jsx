@@ -2,11 +2,9 @@ import { useState, useMemo } from 'react';
 import { RotateCcw, CalendarPlus, AlertTriangle, Pencil, Lightbulb, Code2, Calendar, BookOpen, CheckCircle, Clock4, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../store/StoreContext.jsx';
-import { applyFilters } from '../components/FilterBar.jsx';
 import ProblemTable from '../components/ProblemTable.jsx';
 import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import FilterBar from '../components/FilterBar.jsx';
 import RevisionDateModal from '../components/RevisionDateModal.jsx';
 
 const getRelativeDateString = (dateStr) => {
@@ -57,8 +55,7 @@ function RevisionSkeleton() {
 }
 
 export default function NeedsRevision() {
-  const { problems, updateProblem, filters, problemsLoading } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { problems, updateProblem, problemsLoading } = useStore();
   const [drawerProblem, setDrawerProblem] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dateModalOpen, setDateModalOpen] = useState(false);
@@ -69,8 +66,12 @@ export default function NeedsRevision() {
   }, [problems]);
 
   const visible = useMemo(() => {
-    return applyFilters(revisionProblems, filters, searchQuery);
-  }, [revisionProblems, filters, searchQuery]);
+    return [...revisionProblems].sort((a, b) => {
+      if (!a.revisionDate) return 1;
+      if (!b.revisionDate) return -1;
+      return new Date(a.revisionDate) - new Date(b.revisionDate);
+    });
+  }, [revisionProblems]);
 
   // Compute revision stats
   const stats = useMemo(() => {
@@ -198,7 +199,6 @@ export default function NeedsRevision() {
             </div>
           </div>
 
-          <FilterBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
           {/* Quick-action cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -13,6 +13,19 @@ import { DifficultyBadge, StatusBadge, PlatformBadge } from './Badges.jsx';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const formatComplexity = (str) => {
+  if (!str) return 'o(?)';
+  let clean = str.replace(/^\$\$?|\$\$?$/g, '').trim();
+  clean = clean.replace(/\\times/g, '×').replace(/\\cdot/g, '·');
+  clean = clean.replace(/\\log/g, 'log');
+  clean = clean.replace(/\\/g, '');
+  clean = clean.replace(/_\{([^}]+)\}/g, '_$1');
+  clean = clean.replace(/\^\{([^}]+)\}/g, '^$1');
+  clean = clean.replace(/\{([^}]+)\}/g, '$1');
+  clean = clean.replace(/[{}]/g, '');
+  return clean.toLowerCase();
+};
+
 const initialState = {
   name: '', link: '', platform: '', difficulty: 'Easy', topics: [], patterns: [],
   status: 'Solved', dateSolved: '', timeComplexity: '', spaceComplexity: '',
@@ -26,6 +39,8 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
   const [activeTab, setActiveTab] = useState('overview');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiStage, setAiStage] = useState('');
 
   // Statement fetching
   const [statementStatus, setStatementStatus] = useState('idle'); // idle | fetching | success | error
@@ -49,42 +64,10 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
     return Array.from(new Set([...PATTERNS, ...custom])).sort();
   }, [problems]);
 
-  useEffect(() => {
-    if (open) {
-      if (problem) {
-        setFormData({ ...problem });
-        setEditedCode(problem.solutionCode || '');
-        setIsEditingCode(false);
-        setActiveTab(initialTab || 'overview');
-      } else {
-        const prefilled = initialData ? { ...initialState, ...initialData } : { ...initialState };
-        setFormData({ ...prefilled, dateSolved: new Date().toISOString().substring(0, 10) });
-        setEditedCode('');
-        setIsEditingCode(false);
-        setActiveTab('edit');
-      }
-      setStatementStatus('idle');
-    }
-  }, [open, problem, initialTab, initialData]);
-
-  // Auto-detect code language
-  const code = formData.solutionCode || '';
-  const language = useMemo(() => {
-    const codeLower = code.toLowerCase();
-    if (codeLower.includes('#include') || codeLower.includes('std::')) return 'cpp';
-    if (codeLower.includes('public class') || codeLower.includes('system.out')) return 'java';
-    if (codeLower.includes('def ') || codeLower.includes('print(')) return 'python';
-    return 'javascript';
-  }, [code]);
-
-  // Fetch statement automatically
-  const handleLinkChange = (e) => {
-    const link = e.target.value;
-    setFormData(prev => ({ ...prev, link }));
-
+  const triggerStatementFetch = (link) => {
     if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
 
-    const isLeetCode = /leetcode\.com\/problems\/([\w-]+)/i.test(link);
+    const isLeetCode = /leetcode\.(?:com|cn)\/problems\/([\w-]+)/i.test(link);
     const isCodeforces = /codeforces\.com\/(contest|problemset)\//i.test(link);
     
     if (!isLeetCode && !isCodeforces) {
@@ -126,13 +109,56 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
     }, 800);
   };
 
+  useEffect(() => {
+    if (open) {
+      setStatementStatus('idle');
+      setAiResult(null);
+      setAiStage('');
+      if (problem) {
+        setFormData({ ...problem });
+        setEditedCode(problem.solutionCode || '');
+        setIsEditingCode(false);
+        setActiveTab(initialTab || 'overview');
+      } else {
+        const prefilled = initialData ? { ...initialState, ...initialData } : { ...initialState };
+        setFormData({ ...prefilled, dateSolved: new Date().toISOString().substring(0, 10) });
+        setEditedCode('');
+        setIsEditingCode(false);
+        setActiveTab('edit');
+        if (prefilled.link) {
+          triggerStatementFetch(prefilled.link);
+        }
+      }
+    }
+  }, [open, problem, initialTab, initialData]);
+
+  // Auto-detect code language
+  const code = formData.solutionCode || '';
+  const language = useMemo(() => {
+    const codeLower = code.toLowerCase();
+    if (codeLower.includes('#include') || codeLower.includes('std::')) return 'cpp';
+    if (codeLower.includes('public class') || codeLower.includes('system.out')) return 'java';
+    if (codeLower.includes('def ') || codeLower.includes('print(')) return 'python';
+    return 'javascript';
+  }, [code]);
+
+  // Fetch statement automatically
+  const handleLinkChange = (e) => {
+    const link = e.target.value;
+    setFormData(prev => ({ ...prev, link }));
+    triggerStatementFetch(link);
+  };
+
   const handleAiSuggest = async () => {
     if (!formData.solutionCode) {
       return toast.error('Please paste your solution code first for AI analysis');
     }
 
     setIsAiLoading(true);
+    setAiResult(null);
+    setAiStage('Initializing reasoning agent...');
     try {
+      setAiStage('Analyzing code structure...');
       const res = await fetch(buildApiUrl('/api/problems/ai-suggest'), {
         method: 'POST',
         headers: {
@@ -152,7 +178,9 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
         throw new Error(error.message || 'AI failed');
       }
 
+      setAiStage('Formulating complexity guidelines...');
       const suggestions = await res.json();
+      setAiResult(suggestions);
 
       setFormData(prev => ({
         ...prev,
@@ -169,6 +197,7 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
       toast.error(err.message || 'AI Extraction failed');
     } finally {
       setIsAiLoading(false);
+      setAiStage('');
     }
   };
 
@@ -496,13 +525,39 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
                         {isAiLoading ? 'Analyzing...' : 'AI Suggest ✨'}
                       </button>
                     </div>
-                    <textarea
-                      rows="6"
-                      className="input-field font-mono text-[11px] resize-none py-2.5 no-scrollbar leading-relaxed"
-                      placeholder="Paste your code for complexity extraction..."
-                      value={formData.solutionCode}
-                      onChange={e => setFormData({ ...formData, solutionCode: e.target.value })}
-                    />
+                    <div className="relative rounded-lg overflow-hidden">
+                      <textarea
+                        rows="6"
+                        className="input-field font-mono text-[11px] resize-none py-2.5 no-scrollbar leading-relaxed"
+                        placeholder="Paste your code for complexity extraction..."
+                        value={formData.solutionCode}
+                        onChange={e => setFormData({ ...formData, solutionCode: e.target.value })}
+                        disabled={isAiLoading}
+                      />
+                      {isAiLoading && (
+                        <div className="absolute inset-0 bg-[#090d1a]/85 backdrop-blur-[4px] flex flex-col items-center justify-center p-6 text-center z-10 select-none animate-fade-in">
+                          {/* Shimmering background glow */}
+                          <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-brand-500 via-indigo-500 to-violet-500 blur-xl opacity-60 animate-pulse-slow mb-3" />
+
+                          <div className="space-y-2 relative z-10">
+                            <div className="flex items-center justify-center gap-2">
+                              <Sparkles size={16} className="text-brand-400 animate-pulse" />
+                              <span className="text-xs font-black uppercase tracking-[0.25em] bg-gradient-to-r from-brand-400 via-violet-400 to-indigo-400 bg-clip-text text-transparent">
+                                AI is analyzing
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 font-medium">
+                              {aiStage || 'Thinking...'}
+                            </p>
+
+                            {/* Minimal moving progress line */}
+                            <div className="w-24 h-[2px] bg-slate-800 dark:bg-white/10 rounded-full overflow-hidden mx-auto mt-3">
+                              <div className="h-full bg-gradient-to-r from-brand-500 to-indigo-500 w-[40%] rounded-full animate-marquee-progress" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Core Info */}

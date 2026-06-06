@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 const STORAGE_KEY = 'dsa_tracker_v1';
 const THEME_KEY   = 'dsa_theme';
 const DISMISSED_KEY = 'dsa_dismissed_slugs';
+const PROBLEMS_CACHE_PREFIX = 'dsa_problems_cache_v1';
 
 // Define the base API URL
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
@@ -25,38 +26,94 @@ function genId() {
   return Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 }
 
+function getUserCacheKey(authUser) {
+  const userId = authUser?._id || authUser?.id || authUser?.email;
+  return userId ? `${PROBLEMS_CACHE_PREFIX}:${userId}` : null;
+}
+
+function readProblemsCache(authUser) {
+  const key = getUserCacheKey(authUser);
+  if (!key) return null;
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(cached?.problems) ? cached.problems : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeProblemsCache(cacheKey, problems) {
+  if (!cacheKey) return;
+
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ problems, updatedAt: Date.now() }));
+  } catch {
+    // A full or unavailable localStorage should never block the app.
+  }
+}
+
 // ─── Context ────────────────────────────────────────────────────────────────
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
   const { authUser, updateAuthUser, token } = useAuth();
-  const [problems, setProblems] = useState([]);
-  const [problemsLoading, setProblemsLoading] = useState(true);
+  const currentUserCacheKey = getUserCacheKey(authUser);
+  const initialCachedProblemsRef = useRef();
+  if (initialCachedProblemsRef.current === undefined) {
+    initialCachedProblemsRef.current = readProblemsCache(authUser);
+  }
+  const initialCachedProblems = initialCachedProblemsRef.current;
+  const [problems, setProblems] = useState(initialCachedProblems || []);
+  const [loadedProblemsUserKey, setLoadedProblemsUserKey] = useState(
+    token && initialCachedProblems !== null ? currentUserCacheKey : null
+  );
+  const [problemsRefreshing, setProblemsRefreshing] = useState(false);
+  const problemsLoading = Boolean(token) && (!currentUserCacheKey || loadedProblemsUserKey !== currentUserCacheKey);
 
   useEffect(() => {
     if (!token) {
       setProblems([]);
-      setProblemsLoading(false);
+      setLoadedProblemsUserKey(null);
+      setProblemsRefreshing(false);
       return;
     }
+
+    const cachedProblems = readProblemsCache(authUser);
+    setProblems(cachedProblems || []);
+    setLoadedProblemsUserKey(cachedProblems !== null ? currentUserCacheKey : null);
+
+    const controller = new AbortController();
     const fetchProblems = async () => {
-      setProblemsLoading(true);
+      setProblemsRefreshing(cachedProblems !== null);
       try {
         const res = await fetch(`${API_BASE_URL}/api/problems`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: controller.signal
         });
         if (res.ok) {
           const data = await res.json();
           setProblems(data);
+          writeProblemsCache(currentUserCacheKey, data);
         }
       } catch (err) {
-        console.error('Failed to fetch problems', err);
+        if (err.name !== 'AbortError') console.error('Failed to fetch problems', err);
       } finally {
-        setProblemsLoading(false);
+        if (!controller.signal.aborted) {
+          setLoadedProblemsUserKey(currentUserCacheKey);
+          setProblemsRefreshing(false);
+        }
       }
     };
     fetchProblems();
-  }, [token]);
+    return () => controller.abort();
+  }, [token, currentUserCacheKey]);
+
+  useEffect(() => {
+    if (token && loadedProblemsUserKey === currentUserCacheKey) {
+      writeProblemsCache(currentUserCacheKey, problems);
+    }
+  }, [currentUserCacheKey, loadedProblemsUserKey, problems, token]);
 
   const addProblem = useCallback(async (data) => {
     if (!token) return null;
@@ -396,19 +453,23 @@ export function StoreProvider({ children }) {
   }, [updateAuthUser]); // stable dep — updateAuthUser is useCallback with []
 
   useEffect(() => {
-    if (token) {
-      checkGlobalSubmissions(true);
-      syncAllPlatformStats();
-    }
-    
-    const interval = setInterval(() => {
-      if (token) {
+    if (token && !problemsLoading && !problemsRefreshing) {
+      const initialSync = setTimeout(() => {
         checkGlobalSubmissions(true);
         syncAllPlatformStats();
-      }
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [token, authUser?.leetcodeUsername, authUser?.codeforcesHandle]);
+      }, 1500);
+
+      const interval = setInterval(() => {
+        checkGlobalSubmissions(true);
+        syncAllPlatformStats();
+      }, 5 * 60 * 1000);
+
+      return () => {
+        clearTimeout(initialSync);
+        clearInterval(interval);
+      };
+    }
+  }, [token, authUser?.leetcodeUsername, authUser?.codeforcesHandle, problemsLoading, problemsRefreshing]);
 
   const dismissSubmission = (titleSlug) => {
     setDismissedSlugs(prev => [...prev, titleSlug]);
@@ -421,7 +482,7 @@ export function StoreProvider({ children }) {
   };
 
   const value = useMemo(() => ({
-    problems, addProblem, updateProblem, deleteProblem, problemsLoading,
+    problems, addProblem, updateProblem, deleteProblem, problemsLoading, problemsRefreshing,
     theme, toggleTheme,
     stats, todayStr, activityData,
     filters, setFilter, togglePOTD, setDateRange, authUser,
@@ -429,7 +490,7 @@ export function StoreProvider({ children }) {
     clearDismissedSubmissions, submissionSyncError,
     syncAllPlatformStats, lastSyncTime
   }), [
-    problems, addProblem, updateProblem, deleteProblem, problemsLoading,
+    problems, addProblem, updateProblem, deleteProblem, problemsLoading, problemsRefreshing,
     theme, toggleTheme,
     stats, todayStr, activityData,
     filters, setFilter, togglePOTD, setDateRange, authUser,

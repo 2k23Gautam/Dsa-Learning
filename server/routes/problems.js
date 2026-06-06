@@ -23,9 +23,8 @@ const auth = (req, res, next) => {
 // Get all problems for logged-in user
 router.get('/', auth, async (req, res) => {
   try {
-    const problems = await Problem.find({ user: req.user.id }).sort({ createdAt: -1 });
-    const formatted = problems.map(p => {
-      const obj = p.toObject();
+    const problems = await Problem.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
+    const formatted = problems.map(obj => {
       obj.id = obj._id.toString();
       return obj;
     });
@@ -35,6 +34,69 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+function cleanProblemStatement(text) {
+  if (!text) return '';
+  let cleaned = text;
+  // Strip Leetcode titles and header boilerplates
+  cleaned = cleaned.replace(/^\s*(?:\d+\.\s+)?[\s\S]+?\b(?:Solved|Easy|Medium|Hard)\b[\s,]*\b(?:Topics|Companies|Hint|premium\s+lock\s+icon)\b[\s\S]*?\b(?:Companies|Hint(?:\s+\d+)?|premium\s+lock\s+icon)\b\s*/i, '');
+  cleaned = cleaned.replace(/^\s*(?:Solved|Easy|Medium|Hard|Topics|Companies|Hint(?:\s+\d+)?|premium\s+lock\s+icon|\s)+/i, '');
+  cleaned = cleaned.replace(/\bpremium\s+lock\s+icon\b/gi, '');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+  return cleaned;
+}
+
+function htmlToMarkdown(html) {
+  if (!html) return '';
+  
+  let text = html;
+  
+  // Replace block elements and lists with appropriate line breaks/markdown
+  text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (match, code) => {
+    const cleanCode = code.replace(/<[^>]+>/g, '');
+    return `\n\`\`\`\n${cleanCode.trim()}\n\`\`\`\n`;
+  });
+  
+  text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (match, code) => {
+    return ` \`${code.replace(/<[^>]+>/g, '')}\` `;
+  });
+
+  text = text.replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**');
+  text = text.replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**');
+  text = text.replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '*$1*');
+  text = text.replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '*$1*');
+  
+  text = text.replace(/<li[^>]*>/gi, '\n- ');
+  text = text.replace(/<\/li>/gi, '');
+  text = text.replace(/<ul[^>]*>/gi, '\n');
+  text = text.replace(/<\/ul>/gi, '\n');
+  text = text.replace(/<ol[^>]*>/gi, '\n');
+  text = text.replace(/<\/ol>/gi, '\n');
+  
+  text = text.replace(/<p[^>]*>/gi, '\n\n');
+  text = text.replace(/<\/p>/gi, '\n');
+  
+  text = text.replace(/<div[^>]*>/gi, '\n');
+  text = text.replace(/<\/div>/gi, '\n');
+  
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  
+  // Remove all other HTML tags
+  text = text.replace(/<[^>]+>/g, ' ');
+  
+  // Decode HTML entities
+  text = text.replace(/&nbsp;/g, ' ')
+             .replace(/&lt;/g, '<')
+             .replace(/&gt;/g, '>')
+             .replace(/&amp;/g, '&')
+             .replace(/&quot;/g, '"')
+             .replace(/&#39;/g, "'");
+             
+  // Clean up excessive empty lines
+  text = text.replace(/\n{3,}/g, '\n\n');
+  
+  return text.trim();
+}
 
 // Sanitize body: coerce any string-typed fields that accidentally came as arrays
 function sanitizeBody(body) {
@@ -46,6 +108,9 @@ function sanitizeBody(body) {
     if (Array.isArray(cleaned[field])) {
       cleaned[field] = cleaned[field].join('\n');
     }
+  }
+  if (cleaned.problemStatement) {
+    cleaned.problemStatement = cleanProblemStatement(cleaned.problemStatement);
   }
   return cleaned;
 }
@@ -102,7 +167,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// ─── Fetch Problem Statement from LeetCode or Codeforces ────────────────────────────────────
+// ─── Fetch Problem Statement from LeetCode, Codeforces or GFG ───────────────────────────────
 // @route  POST /api/problems/fetch-statement
 // @desc   Fetch the problem statement text
 // @access Private
@@ -110,11 +175,12 @@ router.post('/fetch-statement', auth, async (req, res) => {
   const { link } = req.body;
   if (!link) return res.status(400).json({ message: 'Link is required' });
 
-  const lcMatch = link.match(/leetcode\.com\/problems\/([\w-]+)/i);
+  const lcMatch = link.match(/leetcode\.(?:com|cn)\/problems\/([\w-]+)/i);
   const isCodeforces = /codeforces\.com\/(contest|problemset)\//i.test(link);
+  const gfgMatch = link.match(/geeksforgeeks\.org\/problems\/([\w-]+)/i);
 
-  if (!lcMatch && !isCodeforces) {
-    return res.status(400).json({ message: 'Not a valid LeetCode or Codeforces URL' });
+  if (!lcMatch && !isCodeforces && !gfgMatch) {
+    return res.status(400).json({ message: 'Not a valid LeetCode, Codeforces, or GeeksforGeeks URL' });
   }
 
   if (lcMatch) {
@@ -135,13 +201,15 @@ router.post('/fetch-statement', auth, async (req, res) => {
 
     try {
       console.log(`[LC Fetch] Fetching problem statement for: ${slug}`);
-      // Use dynamic import for node-fetch if global fetch is not available, but 'fetch' is native in Node 18+
-      const response = await fetch('https://leetcode.com/graphql/', {
+      const domain = link.includes('.cn') ? 'leetcode.cn' : 'leetcode.com';
+      const response = await fetch(`https://${domain}/graphql/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Referer': 'https://leetcode.com',
-          'User-Agent': 'Mozilla/5.0'
+          'Referer': `https://${domain}`,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': `https://${domain}`,
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ query, variables: { titleSlug: slug } }),
       });
@@ -154,16 +222,12 @@ router.post('/fetch-statement', auth, async (req, res) => {
       }
 
       const q = data.data.question;
-      const plainText = (q.content || '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-        .replace(/\s{2,}/g, ' ').trim();
+      const formattedStatement = htmlToMarkdown(q.content || '');
 
       return res.json({
         title: q.title,
         difficulty: q.difficulty,
-        statement: plainText,
+        statement: cleanProblemStatement(formattedStatement),
         topicTags: (q.topicTags || []).map(t => t.name)
       });
     } catch (err) {
@@ -174,20 +238,20 @@ router.post('/fetch-statement', auth, async (req, res) => {
     try {
       console.log(`[CF Fetch] Fetching problem statement for: ${link}`);
       const response = await fetch(link, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
       });
       if (!response.ok) throw new Error(`Codeforces returned ${response.status}`);
       
       const html = await response.text();
       
-      // Try to isolate the problem statement div to avoid sidebar noise
       const match = html.match(/<div[^>]*class="problem-statement"[^>]*>([\s\S]*?)<\/div>\s*<script/i) || 
                     html.match(/<div[^>]*class="problem-statement"[^>]*>([\s\S]*?)<div class="test-example-line/i) ||
                     html.match(/<div[^>]*class="problem-statement"[^>]*>([\s\S]*?)<\/div>(?:<br|<div)/i);
                     
       let bodyHtml = match ? match[1] : html;
 
-      // Extract title if possible
       let title = "Codeforces Problem";
       const titleMatch = bodyHtml.match(/<div class="title">([^<]+)<\/div>/i);
       if (titleMatch) title = titleMatch[1].replace(/^[A-Z]\.\s*/, '').trim();
@@ -195,7 +259,7 @@ router.post('/fetch-statement', auth, async (req, res) => {
       const plainText = bodyHtml
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-        .replace(/\$\$\$([^\$]+)\$\$\$/g, '$1') // Simple mathjax unwrap
+        .replace(/\$\$\$([^\$]+)\$\$\$/g, '$1')
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
@@ -206,13 +270,62 @@ router.post('/fetch-statement', auth, async (req, res) => {
 
       return res.json({
         title: title,
-        difficulty: 'Medium', // CF doesn't provide easy string difficulties directly
-        statement: plainText.substring(0, 8000), // AI prompt limit safety
+        difficulty: 'Medium',
+        statement: cleanProblemStatement(plainText).substring(0, 8000),
         topicTags: []
       });
     } catch (err) {
       console.error('[CF Fetch] Error:', err.message);
       return res.status(500).json({ message: `Failed to fetch from Codeforces` });
+    }
+  } else if (gfgMatch) {
+    try {
+      console.log(`[GFG Fetch] Fetching problem statement for: ${link}`);
+      const response = await fetch(link, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      if (!response.ok) throw new Error(`GeeksforGeeks returned ${response.status}`);
+      
+      const html = await response.text();
+      const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+      
+      let title = "GFG Problem";
+      let difficulty = "Medium";
+      let statement = "";
+      
+      if (nextDataMatch) {
+        const nextDataJson = JSON.parse(nextDataMatch[1]);
+        const allData = nextDataJson.props?.pageProps?.initialState?.problemData?.allData;
+        if (allData && allData.probData) {
+          const pd = allData.probData;
+          title = pd.problem_name || pd.title || title;
+          difficulty = pd.difficulty || difficulty;
+          const rawDesc = pd.problem_description || pd.description || pd.summary || "";
+          statement = htmlToMarkdown(rawDesc);
+        }
+      }
+      
+      if (!statement) {
+        // Strip other scripts/styles first, then parse to markdown
+        const bodyOnly = html
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ');
+        statement = htmlToMarkdown(bodyOnly);
+      }
+
+      console.log(`[GFG Fetch] Got statement for "${title}" (${statement.length} chars)`);
+
+      return res.json({
+        title: title,
+        difficulty: difficulty,
+        statement: cleanProblemStatement(statement).substring(0, 8000),
+        topicTags: []
+      });
+    } catch (err) {
+      console.error('[GFG Fetch] Error:', err.message);
+      return res.status(500).json({ message: `Failed to fetch from GeeksforGeeks` });
     }
   }
 });

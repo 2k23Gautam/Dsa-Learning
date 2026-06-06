@@ -237,14 +237,14 @@ export default function TopicBoard() {
       </div>
 
       {/* Filters and Search Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 gradient-glass p-4">
+      <div className="flex flex-col gap-4 gradient-glass p-4">
         {/* Search Input */}
-        <div className="relative flex-1 max-w-md group">
+        <div className="relative w-full group">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-brand-500" size={16} />
           <input
             type="text"
             placeholder="Search problems, patterns, topics..."
-            className="input-field pl-10 py-1.5"
+            className="input-field pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -259,7 +259,7 @@ export default function TopicBoard() {
         </div>
 
         {/* Pill Segmented Controls */}
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-6 border-t border-slate-200/30 dark:border-white/[0.02] pt-3">
           <div className="flex flex-col gap-1">
             <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Difficulty</span>
             <div className="flex bg-slate-100 dark:bg-white/[0.03] border border-slate-200/50 dark:border-white/[0.06] p-1 rounded-xl gap-0.5">

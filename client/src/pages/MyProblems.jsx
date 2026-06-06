@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { Plus, User } from 'lucide-react';
 import { useStore } from '../store/StoreContext.jsx';
 import { useAuth } from '../store/AuthContext.jsx';
-import FilterBar, { applyFilters, EMPTY_FILTERS } from '../components/FilterBar.jsx';
 import ProblemTable from '../components/ProblemTable.jsx';
 import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -31,13 +30,14 @@ function TableSkeleton() {
 }
 
 export default function MyProblems() {
-  const { problems, filters, problemsLoading } = useStore();
+  const { problems, problemsLoading } = useStore();
   const { authUser } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const mine = problems;
-  const visible = applyFilters(mine, filters, searchQuery);
+  const visible = useMemo(() => {
+    return [...mine].sort((a, b) => new Date(b.dateSolved || b.createdAt || 0) - new Date(a.dateSolved || a.createdAt || 0));
+  }, [mine]);
 
   const stats = useMemo(() => {
     let easy = 0, medium = 0, hard = 0;
@@ -112,7 +112,6 @@ export default function MyProblems() {
             </div>
           </div>
 
-          <FilterBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
           
           <div className="gradient-glass overflow-hidden flex flex-col mt-2">
             {problemsLoading ? (

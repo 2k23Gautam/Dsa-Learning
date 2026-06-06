@@ -12,6 +12,7 @@ import BadgeDisplay from '../components/BadgeDisplay.jsx';
 import MilestoneModal from '../components/MilestoneModal.jsx';
 import ProblemDrawer from '../components/ProblemDrawer.jsx';
 import { Sparkles } from 'lucide-react';
+import Skeleton from '../components/Skeleton.jsx';
 
 import { BAR_COLORS } from '../store/data.js';
 
@@ -155,6 +156,7 @@ export default function Dashboard() {
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [drawerState, setDrawerState] = useState({ open: false, problem: null, initialTab: 'overview', initialData: null });
   const [contests, setContests] = useState([]);
+  const [contestsLoading, setContestsLoading] = useState(true);
   const [contestError, setContestError] = useState(false);
   const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -167,6 +169,7 @@ export default function Dashboard() {
   };
 
   const fetchContests = async () => {
+    setContestsLoading(true);
     setContestError(false);
     try {
       const res = await fetch(buildApiUrl('/api/platforms/contests'), {
@@ -180,6 +183,8 @@ export default function Dashboard() {
     } catch (e) {
       console.error('Contest fetch error:', e);
       setContestError(true);
+    } finally {
+      setContestsLoading(false);
     }
   };
 
@@ -411,7 +416,9 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {contests.length > 0 ? (
+        {contestsLoading ? (
+          <ContestSkeleton />
+        ) : contests.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {contests.map((contest) => {
               const isCodeforces = contest.platform?.toLowerCase().includes('codeforces');
@@ -1105,6 +1112,26 @@ function SmallStatCard({ label, value, icon, colorClass }) {
       <div className={`w-8 h-8 rounded-full bg-slate-100 dark:bg-white/[0.04] flex items-center justify-center ${colorClass}`}>
         {icon}
       </div>
+    </div>
+  );
+}
+
+function ContestSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Loading upcoming contests">
+      {[0, 1, 2].map((item) => (
+        <div key={item} className="gradient-glass p-5 space-y-4">
+          <div className="flex justify-between gap-4">
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-4 w-24 rounded" />
+          </div>
+          <Skeleton className="h-5 w-4/5 rounded-lg" />
+          <div className="flex justify-between gap-4 pt-1">
+            <Skeleton className="h-4 w-16 rounded" />
+            <Skeleton className="h-7 w-20 rounded-lg" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

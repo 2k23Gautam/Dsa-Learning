@@ -1,210 +1,425 @@
-const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-/**
- * Suggest metadata for a DSA problem based on the problem name/link,
- * the problem statement (if fetched), and the user's submitted solution code.
- *
- * @param {string} problemInput  - Problem name or link (fallback identifier)
- * @param {string} solutionCode  - User's solution code
- * @param {string} problemStatement - Full problem statement text (optional)
- */
-async function suggestProblemMetadata(problemInput, solutionCode = "", problemStatement = "") {
-  const groqKey = process.env.GROQ_API_KEY;
+function cleanString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
 
-  if (!groqKey) {
-    throw new Error("GROQ_API_KEY is not configured in .env");
+function cleanArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(cleanString).filter(Boolean);
+}
+
+function cleanComplexityString(str) {
+  if (!str) return '';
+  let clean = str.replace(/^\$\$?|\$\$?$/g, '').trim();
+  clean = clean.replace(/\\times/g, '×').replace(/\\cdot/g, '·');
+  clean = clean.replace(/\\log/g, 'log');
+  clean = clean.replace(/\\/g, '');
+  clean = clean.replace(/_\{([^}]+)\}/g, '_$1');
+  clean = clean.replace(/\^\{([^}]+)\}/g, '^$1');
+  clean = clean.replace(/\{([^}]+)\}/g, '$1');
+  clean = clean.replace(/[{}]/g, '');
+  return clean;
+}
+
+
+function parseAiResponse(text) {
+  if (!text) throw new Error('Empty response from AI');
+
+  const getSection = (headerName) => {
+    const escapedHeader = headerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(
+      `(?:#+)\\s*${escapedHeader}[\\s\\S]*?(?=(?:#+\\s*(?:Intuition|Pattern|Topics Used|Time Complexity|Space Complexity)|---|\\n#+|$))`,
+      'i'
+    );
+    const match = text.match(regex);
+    if (!match) return '';
+    const headerRegex = new RegExp(`^(?:#+)\\s*${escapedHeader}\\s*`, 'i');
+    return match[0].replace(headerRegex, '').trim();
+  };
+
+  const intuitionText = getSection('Intuition');
+  const patternText = getSection('Pattern');
+  const topicsText = getSection('Topics Used');
+  const timeText = getSection('Time Complexity');
+  const spaceText = getSection('Space Complexity');
+
+  const extractBulletedItems = (sectionText) => {
+    return sectionText
+      .split('\n')
+      .map(line => {
+        const match = line.trim().match(/^[-*+]\s+(.*)$/);
+        return match ? match[1].trim() : line.trim();
+      })
+      .filter(item => item.length > 0 && !item.startsWith('---'));
+  };
+
+  const patterns = extractBulletedItems(patternText);
+  const topics = extractBulletedItems(topicsText);
+
+  const extractComplexity = (sectionText) => {
+    const lines = sectionText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('---') && !l.startsWith('#'));
+
+    if (lines.length === 0) return '';
+
+    let result = '';
+    let openParens = 0;
+    let closeParens = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      result += (result ? ' ' : '') + line;
+
+      openParens = (result.match(/\(/g) || []).length;
+      closeParens = (result.match(/\)/g) || []).length;
+
+      if (openParens > 0 && openParens <= closeParens) {
+        break;
+      }
+      if (i === 0 && openParens === 0) {
+        break;
+      }
+    }
+
+    return result;
+  };
+
+  const timeComplexity = cleanComplexityString(extractComplexity(timeText));
+  const spaceComplexity = cleanComplexityString(extractComplexity(spaceText));
+
+  // Fallback for summary/bruteForce/keyInsight to prevent UI empty states
+  const intuitionParagraphs = intuitionText.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+  const summary = intuitionParagraphs[0] || 'Analyze problem and solution to build intuition.';
+  
+  let bruteForce = 'Identify the brute force approach and why it is too slow.';
+  let keyInsight = 'Identify the key mental shift or observation.';
+  let correctness = 'Verify why this approach produces correct results.';
+  
+  if (intuitionParagraphs.length >= 3) {
+    bruteForce = intuitionParagraphs[0];
+    keyInsight = intuitionParagraphs[1];
+    correctness = intuitionParagraphs.slice(2).join('\n\n');
+  } else if (intuitionParagraphs.length === 2) {
+    bruteForce = intuitionParagraphs[0];
+    keyInsight = intuitionParagraphs[1];
+    correctness = intuitionParagraphs[1];
+  } else if (intuitionParagraphs.length === 1) {
+    bruteForce = intuitionParagraphs[0];
+    keyInsight = intuitionParagraphs[0];
+    correctness = intuitionParagraphs[0];
   }
 
-  const hasSolution = solutionCode && solutionCode.trim().length > 0;
-  const hasStatement = problemStatement && problemStatement.trim().length > 0;
-  const hasContext = problemInput && problemInput !== 'Unknown Problem';
+  // Create steps from sentences in intuition
+  const sentences = intuitionText
+    .replace(/([.?!])\s*(?=[A-Z])/g, '$1|')
+    .split('|')
+    .map(s => s.trim())
+    .filter(s => s.length > 5);
 
-  const prompt = `You are a world-class DSA (Data Structures & Algorithms) coach and competitive programmer. Your task is to analyze the given information and return a precise JSON object.
+  const steps = sentences.slice(0, 8);
 
-${hasStatement ? `## Problem Statement\n${problemStatement.trim()}` : hasContext ? `## Problem\n"${problemInput}"` : ''}
-
-${hasSolution ? `## User's Solution Code\n\`\`\`\n${solutionCode.trim()}\n\`\`\`` : ''}
-
-## Your Task
-Analyze BOTH the problem statement and the user's solution code. Extract the following fields cleanly to be used by the student for revision.
-
-- **topics**: List the core DSA topics this problem tests (array of strings, e.g. ["Array"]).
-- **patterns**: List the key algorithmic patterns (array of strings, e.g. ["Two Pointers"]).
-- **difficulty**: "Easy", "Medium", or "Hard".
-- **timeComplexity**: Strictly Big-O notation, e.g. "O(n)".
-- **spaceComplexity**: Strictly Big-O notation, e.g. "O(1)".
-- **suggestedApproach**: A detailed, highly-structured markdown explanation. Ensure the output feels modern and premium. It must guide the user on how to think, build intuition, and arrive at the solution step-by-step. You MUST output this EXACT visually advanced layout:
-
-## Output Format
-You MUST structure your response EXACTLY like this (JSON first, then the Markdown approach between delimiters):
-
-{
-  "topics": ["Array"],
-  "difficulty": "Medium",
-  "patterns": ["Two Pointers"],
-  "timeComplexity": "O(n)",
-  "spaceComplexity": "O(1)"
+  return {
+    topics,
+    patterns,
+    difficulty: '',
+    timeComplexity,
+    spaceComplexity,
+    suggestedApproach: text, // The complete markdown is saved as the approach
+    summary,
+    bruteForce,
+    keyInsight,
+    steps,
+    correctness,
+    edgeCases: [],
+    implementationNotes: [],
+    takeaway: patterns[0] || 'DSA reasoning takeaway'
+  };
 }
-===APPROACH_START===
+
+/**
+ * Analyze a problem statement together with the user's submitted solution.
+ * The result is structured for both a reasoning UI and saved revision notes.
+ */
+async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '') {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error('GEMINI_API_KEY is not configured in .env');
+
+  const statement = cleanString(problemStatement).slice(0, 14000);
+  const code = cleanString(solutionCode).slice(0, 14000);
+  const identifier = cleanString(problemInput) || 'Unknown Problem';
+
+  const prompt = `You are an expert DSA educator.
+
+For every LeetCode/GFG problem and solution provided, generate an explanation in the following format:
+
 # Intuition
 
-### The Brute Force Thought
-Explain the initial, most straightforward thought process/brute-force approach and why it is suboptimal (e.g. mention its complexity limits).
-
----
-
-### The Key Mental Shift
-Detail the core observation, key insight, or question the solver should ask themselves to optimize the solution. Use blockquotes (\`>\`) for key questions/thoughts (e.g., \`> "What if we did..."\`).
-
----
-
-### How the Optimized Solution Works
-Break down the step-by-step logic of how to build, traverse, or compute the optimized solution.
-
----
-
-### Why it Works & is Optimal
-Explain why this optimized approach is correct and why it runs within the expected complexity bounds.
-
----
-
-### Final Insight
-> [Provide a concise, memorable key takeaway sentence that generalizes the lesson learned here]
+- Focus on HOW TO THINK about the solution, not line-by-line code explanation.
+- Start from the brute force thought process.
+- Explain why brute force is too slow.
+- Explain the key observation that leads to the optimal solution.
+- Explain why the chosen technique (Binary Search, Sliding Window, DP, Monotonic Stack, Graph, etc.) naturally follows from that observation.
+- If binary search is used, clearly explain:
+  - what answer/value is being binary searched,
+  - why the search space is monotonic,
+  - why count >= target and count < target move left/right.
+  - If the condition is count >= k, explain with an example why both count == k and count > k move left.
+- If sliding window is used, explain:
+  - why the window is valid,
+  - why r-l+1 subarrays are added whenever applicable.
+- If monotonic stack is used, explain:
+  - what elements are being eliminated,
+  - why each element is pushed/popped at most once.
+- If DP/Digit DP is used, explain:
+  - what the state represents,
+  - why those states are sufficient,
+  - what information is carried forward.
+- Write intuition in paragraph form similar to a human interview discussion.
+- Avoid excessive code explanation.
+- Focus on the reasoning that leads to the solution.
 
 ---
 
 # Pattern
 
-* [Pattern 1, e.g. Binary Search on Partition]
-* [Pattern 2]
+Mention the high-level pattern.
+
+Examples:
+
+- Binary Search on Answer
+- Sliding Window
+- Monotonic Stack
+- Digit DP
+- Two Pointers
+- Greedy
+- Graph Traversal
+- Prefix Sum
+- Dynamic Programming
+
+---
 
 # Topics Used
 
-* [Topic 1, e.g. Arrays]
-* [Topic 2]
+List the topics.
+
+Example:
+
+- Arrays
+- Binary Search
+- Greedy
+
+---
 
 # Time Complexity
 
-\`\`\`cpp
-[Strictly Big-O notation, e.g. O(log(min(n1,n2)))]
-\`\`\`
+Provide complexity with reasoning. Ensure it is mathematically correct and precisely reflects the state space and transitions. For dynamic programming (DP / Digit DP), the time complexity must be exactly O(number of states * transition time per state). For example, if the state space has dimensions L * D * D and we iterate through D choices per transition, the time complexity is O(L * D^3) (or O(L * 11 * 11 * 10) = O(L * D^3)), not O(L * D^2).
+
+Example:
+
+O(n log n)
+
+because sorting takes O(n log n).
+
+---
 
 # Space Complexity
 
-\`\`\`cpp
-[Strictly Big-O notation, e.g. O(1)]
-\`\`\`
-===APPROACH_END===
-`;
+Provide auxiliary space complexity. For dynamic programming (DP / Digit DP), the auxiliary space complexity is exactly O(number of states) if using memoization, or O(1) if space-optimized.
 
-  // ─── Try Groq (llama-3.3-70b-versatile) ───────────────
-  if (groqKey) {
-    const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-    
-    const groqModels = [
-      "llama-3.3-70b-versatile",
-      "mixtral-8x7b-32768"
-    ];
+Example:
 
-    let lastError = "Unknown error";
-    for (const MODEL of groqModels) {
-      try {
-        console.log(`[AI] Trying Groq ${MODEL}...`);
-        const response = await axios.post(
-          GROQ_URL,
-          {
-            model: MODEL,
-            messages: [
-              {
-                role: "system",
-                content: "You are a world-class DSA expert. Follow the exact requested format delimited by ===APPROACH_START===."
-              },
-              {
-                role: "user",
-                content: prompt
-              }
-            ],
-            temperature: 0.2,
-            max_tokens: 1500
-          },
-          {
-            headers: {
-              "Authorization": `Bearer ${groqKey}`,
-              "Content-Type": "application/json"
-            },
-            timeout: 20000
-          }
-        );
+O(1)
 
-        const text = response.data?.choices?.[0]?.message?.content;
-        console.log(`[AI] Groq (${MODEL}) response received.`);
-        return parseAiResponse(text);
-      } catch (err) {
-        lastError = err.response?.data?.error?.message || err.message;
-        console.warn(`[AI] Groq ${MODEL} failed:`, lastError);
-        // If it's a hard error like 404 or missing model, we can continue to fallback
-        if (!lastError.includes('rate_limit') && !lastError.includes('model') && !lastError.includes('404')) {
-          break;
+---
+
+# Example 1
+
+Problem:
+69. Sqrt(x)
+
+Solution Idea:
+Binary Search on Answer
+
+Output:
+
+# Intuition
+
+The brute force approach would be to try every integer from 0 up to x and check whose square is equal to or just smaller than x. However, x can be as large as 2³¹−1, making linear search too expensive.
+
+The key observation is that the answer is bounded between 0 and x. If some number mid satisfies mid² ≤ x, then every number smaller than mid will also satisfy the condition. Similarly, if mid² > x, then every number larger than mid will also fail. This creates a monotonic search space, which is exactly what binary search requires.
+
+Rather than searching for the square root directly, we search for the largest number whose square does not exceed x. Whenever mid² ≤ x, we try larger values because a better answer may exist. Otherwise, we move left. The final valid value becomes the floor square root.
+
+# Pattern
+
+- Binary Search on Answer
+
+# Topics Used
+
+- Binary Search
+- Math
+
+# Time Complexity
+
+O(log x)
+
+# Space Complexity
+
+O(1)
+
+---
+
+# Example 2
+
+Problem:
+713. Subarray Product Less Than K
+
+Solution Idea:
+Sliding Window
+
+Output:
+
+# Intuition
+
+The brute force solution would generate all subarrays and compute their products, resulting in O(n²) subarrays and even higher complexity if products are recomputed repeatedly.
+
+The important observation is that all numbers are positive. Because of this, whenever the product becomes too large, extending the window further can only make it larger. This monotonic behavior suggests a sliding window.
+
+We maintain a window whose product is always less than k. Whenever the product becomes greater than or equal to k, we shrink the window from the left until it becomes valid again.
+
+Once the window [l, r] is valid, every subarray ending at r and starting anywhere between l and r is also valid. There are exactly:
+
+r - l + 1
+
+such subarrays:
+
+[r]
+[r-1, r]
+[r-2, r]
+...
+[l, r]
+
+Therefore we add r−l+1 to the answer at every step.
+
+# Pattern
+
+- Sliding Window
+
+# Topics Used
+
+- Two Pointers
+- Sliding Window
+
+# Time Complexity
+
+O(n)
+
+# Space Complexity
+
+O(1)
+
+---
+
+# Example 3
+
+Problem:
+668. Kth Smallest Number in Multiplication Table
+
+Solution Idea:
+Binary Search on Answer
+
+Output:
+
+# Intuition
+
+Generating all m×n values and sorting them is impossible for large constraints. Instead of asking for the kth smallest number directly, we ask a different question:
+
+"How many numbers in the multiplication table are less than or equal to X?"
+
+If we can answer this efficiently, then we can binary search for the smallest value whose count reaches at least k.
+
+For a row that starts with i, the elements are:
+
+i, 2i, 3i, ... , ni
+
+The count of values less than or equal to X in this row is:
+
+min(n, X / i)
+
+Summing this over all rows gives the total count.
+
+Now suppose k = 5.
+
+If count(X) = 3, then there are only 3 elements ≤ X, meaning the 5th element must be larger. So we move right.
+
+If count(X) = 5, then X could be the answer, but a smaller valid value may still exist. So we move left.
+
+If count(X) = 8, then X is definitely large enough, but again a smaller valid value may still satisfy the condition. So we move left.
+
+Thus whenever count(X) >= k we search left because we are looking for the FIRST value whose count reaches at least k. This is exactly lower bound binary search on the answer.
+
+# Pattern
+
+- Binary Search on Answer
+- Kth Smallest Element
+
+# Topics Used
+
+- Binary Search
+- Counting
+- Matrix
+
+# Time Complexity
+
+O(m log(m*n))
+
+# Space Complexity
+
+O(1)
+
+---
+
+Now use the same style and formatting for the following problem and solution:
+
+Problem:
+${identifier}
+${statement || 'Not available. Infer from the solution code.'}
+
+Solution:
+${code || 'No solution code supplied.'}`;
+
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
+  let lastError = 'Unknown error';
+
+  for (const modelName of models) {
+    try {
+      console.log(`[AI] Trying Gemini ${modelName}...`);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: "You are a precise DSA educator. Respond in the exact format requested.",
+        generationConfig: {
+          temperature: 0.15,
         }
+      });
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      if (!responseText) {
+        throw new Error('Empty response text from Gemini');
       }
+
+      return parseAiResponse(responseText);
+    } catch (error) {
+      lastError = error.message;
+      console.warn(`[AI] Gemini ${modelName} failed:`, lastError);
     }
-    console.log(`[AI] All Groq models failed. Last error: ${lastError}`);
-    throw new Error(`AI Request Failed: ${lastError}`);
-  }
-}
-
-/**
- * Parse and sanitize the AI response
- */
-function parseAiResponse(text) {
-  if (!text) throw new Error("Empty response from AI");
-
-  let jsonPart = text;
-  let approachPart = "";
-
-  if (text.includes("===APPROACH_START===")) {
-    const parts = text.split("===APPROACH_START===");
-    jsonPart = parts[0];
-    approachPart = parts[1].replace("===APPROACH_END===", "").trim();
   }
 
-  // Strip markdown code fences if present around the JSON
-  const jsonStr = jsonPart.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-  let raw = {};
-  try {
-    raw = JSON.parse(jsonStr);
-  } catch (e) {
-    throw new Error("AI output was not valid JSON: " + e.message);
-  }
-
-  // Helper to get a field by multiple possible key names (case-insensitive)
-  const get = (keys) => {
-    for (const k of keys) {
-      if (raw[k] !== undefined) return raw[k];
-      const lk = k.toLowerCase();
-      if (raw[lk] !== undefined) return raw[lk];
-    }
-    return null;
-  };
-
-
-  // Sanitize arrays
-  const toArray = (val) => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val.filter(v => typeof v === 'string' && v.trim());
-    if (typeof val === 'string') return [val.trim()].filter(Boolean);
-    return [];
-  };
-
-  return {
-    topics: toArray(get(['topics'])),
-    patterns: toArray(get(['patterns'])),
-    difficulty: get(['difficulty']) || "",
-    timeComplexity: get(['timeComplexity', 'time_complexity']) || "",
-    spaceComplexity: get(['spaceComplexity', 'space_complexity']) || "",
-    suggestedApproach: approachPart || get(['suggestedApproach', 'approach', 'suggested_approach']) || ""
-  };
+  throw new Error(`AI request failed: ${lastError}`);
 }
 
 module.exports = { suggestProblemMetadata };
