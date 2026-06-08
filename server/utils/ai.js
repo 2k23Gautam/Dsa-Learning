@@ -1,4 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
+
 
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -143,15 +145,18 @@ function parseAiResponse(text) {
  * Analyze a problem statement together with the user's submitted solution.
  * The result is structured for both a reasoning UI and saved revision notes.
  */
-async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '') {
+async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = []) {
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) throw new Error('GEMINI_API_KEY is not configured in .env');
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
+  if (!geminiKey && !openRouterKey) {
+    throw new Error('Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is configured in .env');
+  }
 
   const statement = cleanString(problemStatement).slice(0, 14000);
   const code = cleanString(solutionCode).slice(0, 14000);
   const identifier = cleanString(problemInput) || 'Unknown Problem';
 
-  const prompt = `You are an expert DSA educator.
+  const prompt = `You are an expert DSA educator. Write the explanation in very simple, plain English, and beginner-friendly language. Avoid overly complex jargon, and explain the intuition step-by-step as if you are teaching a beginner student. Keep the tone warm, friendly, and encouraging.
 
 For every LeetCode/GFG problem and solution provided, generate an explanation in the following format:
 
@@ -382,6 +387,15 @@ O(1)
 
 ---
 
+Existing Topics in user's database: ${existingTopics.length > 0 ? existingTopics.join(', ') : 'None'}
+Existing Patterns in user's database: ${existingPatterns.length > 0 ? existingPatterns.join(', ') : 'None'}
+
+CRITICAL INSTRUCTION FOR TOPICS & PATTERNS:
+Look at the list of "Existing Topics" and "Existing Patterns" above.
+- If one of the existing topics or patterns matches the concept/idea of the problem, you MUST reuse the exact spelling/formatting of that existing topic or pattern.
+- For example, do not output "Arrays" if "Array" is already listed, or "Hash Table" if "Hash Map" is already listed. Select from the existing list to maintain database consistency.
+- Only suggest a completely new topic or pattern if it does not conceptually match any of the existing items.
+
 Now use the same style and formatting for the following problem and solution:
 
 Problem:
@@ -391,31 +405,77 @@ ${statement || 'Not available. Infer from the solution code.'}
 Solution:
 ${code || 'No solution code supplied.'}`;
 
-  const genAI = new GoogleGenerativeAI(geminiKey);
-  const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
   let lastError = 'Unknown error';
 
-  for (const modelName of models) {
-    try {
-      console.log(`[AI] Trying Gemini ${modelName}...`);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: "You are a precise DSA educator. Respond in the exact format requested.",
-        generationConfig: {
-          temperature: 0.15,
-        }
-      });
+  if (geminiKey) {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
 
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
+    for (const modelName of models) {
+      try {
+        console.log(`[AI] Trying Gemini ${modelName}...`);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: "You are a precise, user-friendly DSA educator. Keep your language very simple, warm, and easy for beginners to understand. Respond in the exact format requested.",
+          generationConfig: {
+            temperature: 0.15,
+          }
+        });
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        if (!responseText) {
+          throw new Error('Empty response text from Gemini');
+        }
+
+        return parseAiResponse(responseText);
+      } catch (error) {
+        lastError = error.message;
+        console.warn(`[AI] Gemini ${modelName} failed:`, lastError);
+      }
+    }
+  }
+
+  if (openRouterKey) {
+    const openRouterModel = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-pro-preview';
+    try {
+      console.log(`[AI] Trying OpenRouter model ${openRouterModel}...`);
+      const response = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          model: openRouterModel,
+          messages: [
+            {
+              role: 'system',
+              content: "You are a precise, user-friendly DSA educator. Keep your language very simple, warm, and easy for beginners to understand. Respond in the exact format requested."
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.15,
+          max_tokens: 2048,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${openRouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'http://localhost:5173',
+            'X-Title': 'DSA Tracker'
+          }
+        }
+      );
+
+      const responseText = response.data?.choices?.[0]?.message?.content;
       if (!responseText) {
-        throw new Error('Empty response text from Gemini');
+        throw new Error('Empty response text from OpenRouter');
       }
 
       return parseAiResponse(responseText);
     } catch (error) {
-      lastError = error.message;
-      console.warn(`[AI] Gemini ${modelName} failed:`, lastError);
+      lastError = error.response?.data?.error?.message || error.message;
+      console.warn(`[AI] OpenRouter failed:`, lastError);
     }
   }
 

@@ -345,7 +345,13 @@ router.post('/ai-suggest', auth, async (req, res) => {
 
     console.log(`[AI Suggest] Problem: "${input}", Has statement: ${!!problemStatement}, Has code: ${!!solutionCode}`);
 
-    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement);
+    // Fetch distinct topics and patterns for the user to help deduplicate
+    const [existingTopics, existingPatterns] = await Promise.all([
+      Problem.distinct('topics', { user: req.user.id }),
+      Problem.distinct('patterns', { user: req.user.id })
+    ]);
+
+    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns);
     console.log('[AI Result]', JSON.stringify(metadata, null, 2));
     res.json(metadata);
   } catch (err) {
