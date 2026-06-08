@@ -13,6 +13,8 @@ export default function Profile() {
   
   const [lcHandle, setLcHandle] = useState(authUser?.leetcodeUsername || '');
   const [cfHandle, setCfHandle] = useState(authUser?.codeforcesHandle || '');
+  const [geminiKey, setGeminiKey] = useState(authUser?.geminiApiKey || '');
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const handleUpdateHandles = async (e) => {
     e.preventDefault();
@@ -27,15 +29,16 @@ export default function Profile() {
         body: JSON.stringify({
           leetcodeUsername: lcHandle,
           codeforcesHandle: cfHandle,
+          geminiApiKey: geminiKey,
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       
       updateAuthUser(data.user);
-      toast.success('Handles updated successfully');
+      toast.success('Profile preferences & API Key updated successfully');
     } catch (err) {
-      toast.error(err.message || 'Failed to update handles');
+      toast.error(err.message || 'Failed to update preferences');
     } finally {
       setLoading(false);
     }
@@ -181,6 +184,30 @@ export default function Profile() {
                     className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
                   />
                 </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-brand-500/50 transition-all">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Gemini API Key</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <Settings size={16} />
+                  </div>
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    placeholder="e.g. AIzaSy..."
+                    className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                  >
+                    {showApiKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Provides custom answering capabilities for your profile.</p>
               </div>
 
               <div className="flex justify-end border-t border-slate-200 dark:border-white/5 pt-6">

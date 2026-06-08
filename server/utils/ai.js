@@ -145,11 +145,11 @@ function parseAiResponse(text) {
  * Analyze a problem statement together with the user's submitted solution.
  * The result is structured for both a reasoning UI and saved revision notes.
  */
-async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = []) {
-  const geminiKey = process.env.GEMINI_API_KEY;
+async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = [], userApiKey = null) {
+  const geminiKey = userApiKey || process.env.GEMINI_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
   if (!geminiKey && !openRouterKey) {
-    throw new Error('Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is configured in .env');
+    throw new Error('Neither user Gemini API Key, GEMINI_API_KEY, nor OPENROUTER_API_KEY is configured');
   }
 
   const statement = cleanString(problemStatement).slice(0, 14000);

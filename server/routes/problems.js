@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const Problem = require('../models/Problem');
+const User = require('../models/User');
 const { suggestProblemMetadata } = require('../utils/ai');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfallback';
@@ -346,12 +347,14 @@ router.post('/ai-suggest', auth, async (req, res) => {
     console.log(`[AI Suggest] Problem: "${input}", Has statement: ${!!problemStatement}, Has code: ${!!solutionCode}`);
 
     // Fetch distinct topics and patterns for the user to help deduplicate
-    const [existingTopics, existingPatterns] = await Promise.all([
+    const [existingTopics, existingPatterns, user] = await Promise.all([
       Problem.distinct('topics', { user: req.user.id }),
-      Problem.distinct('patterns', { user: req.user.id })
+      Problem.distinct('patterns', { user: req.user.id }),
+      User.findById(req.user.id)
     ]);
 
-    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns);
+    const userApiKey = user?.geminiApiKey || null;
+    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns, userApiKey);
     console.log('[AI Result]', JSON.stringify(metadata, null, 2));
     res.json(metadata);
   } catch (err) {

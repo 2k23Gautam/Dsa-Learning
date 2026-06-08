@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   leetcodeUsername: { type: String, default: "" },
   codeforcesHandle: { type: String, default: "" },
+  geminiApiKey: { type: String, default: "" },
   profileImage: { type: String, default: "" },
   leetcodeStats: { type: Object, default: null },
   platformStats: { 
