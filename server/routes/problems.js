@@ -354,7 +354,9 @@ router.post('/ai-suggest', auth, async (req, res) => {
     ]);
 
     const userApiKey = user?.geminiApiKey || null;
-    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns, userApiKey);
+    const groqApiKey = user?.groqApiKey || null;
+    const preferredModel = user?.preferredAiModel || null;
+    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns, userApiKey, groqApiKey, preferredModel);
     console.log('[AI Result]', JSON.stringify(metadata, null, 2));
     res.json(metadata);
   } catch (err) {

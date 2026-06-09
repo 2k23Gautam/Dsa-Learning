@@ -15,6 +15,9 @@ export default function Profile() {
   const [cfHandle, setCfHandle] = useState(authUser?.codeforcesHandle || '');
   const [geminiKey, setGeminiKey] = useState(authUser?.geminiApiKey || '');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [groqKey, setGroqKey] = useState(authUser?.groqApiKey || '');
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [aiModel, setAiModel] = useState(authUser?.preferredAiModel || '');
 
   const handleUpdateHandles = async (e) => {
     e.preventDefault();
@@ -30,6 +33,8 @@ export default function Profile() {
           leetcodeUsername: lcHandle,
           codeforcesHandle: cfHandle,
           geminiApiKey: geminiKey,
+          groqApiKey: groqKey,
+          preferredAiModel: aiModel,
         })
       });
       const data = await res.json();
@@ -141,18 +146,14 @@ export default function Profile() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Settings Area */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Platform Connections Card */}
           <div className="gradient-glass p-8 space-y-8">
             <h2 className="text-sm font-black text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-white/5 pb-4 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Settings size={16} /> Account Preferences
+              <Link size={16} className="text-brand-500" /> Platform Connections
             </h2>
 
             <form onSubmit={handleUpdateHandles} className="space-y-6">
-              <div className="flex flex-col gap-1 mb-2">
-                <h2 className="text-sm font-black text-slate-600 dark:text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                  <Link size={16} className="text-brand-500" /> Platform Connections
-                </h2>
-                <p className="text-xs text-slate-400">Link your LeetCode account to automate tracking</p>
-              </div>
+              <p className="text-xs text-slate-400 mb-2">Link your coding profiles to automate tracking.</p>
 
               <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-brand-500/50 transition-all">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">LeetCode Username</label>
@@ -186,7 +187,30 @@ export default function Profile() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-brand-500/50 transition-all">
+              <div className="flex justify-end border-t border-slate-200 dark:border-white/5 pt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                >
+                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  Save Connections
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* AI Settings Card */}
+          <div className="gradient-glass p-8 space-y-8 relative overflow-hidden mt-6 border border-emerald-500/20">
+            <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] pointer-events-none" />
+            <h2 className="text-sm font-black text-emerald-600 dark:text-emerald-400 border-b border-emerald-200 dark:border-emerald-500/20 pb-4 uppercase tracking-[0.2em] flex items-center gap-2 relative z-10">
+              <Settings size={16} /> AI Configuration
+            </h2>
+
+            <form onSubmit={handleUpdateHandles} className="space-y-6 relative z-10">
+              <p className="text-xs text-slate-400 mb-2">Power your problem-solving with custom AI models. Provide your own API keys for unlimited usage.</p>
+
+              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-emerald-500/50 transition-all">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Gemini API Key</label>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
@@ -202,7 +226,7 @@ export default function Profile() {
                   <button 
                     type="button" 
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                    className="text-xs text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
                   >
                     {showApiKey ? 'Hide' : 'Show'}
                   </button>
@@ -210,14 +234,62 @@ export default function Profile() {
                 <p className="text-[10px] text-slate-400 mt-2">Provides custom answering capabilities for your profile.</p>
               </div>
 
-              <div className="flex justify-end border-t border-slate-200 dark:border-white/5 pt-6">
+              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-indigo-500/50 transition-all">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Groq API Key</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                    <Settings size={16} />
+                  </div>
+                  <input
+                    type={showGroqKey ? "text" : "password"}
+                    value={groqKey}
+                    onChange={(e) => setGroqKey(e.target.value)}
+                    placeholder="e.g. gsk_..."
+                    className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowGroqKey(!showGroqKey)}
+                    className="text-xs text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    {showGroqKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Provides Groq-powered AI capabilities.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-purple-500/50 transition-all">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Preferred AI Model</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
+                    <Settings size={16} />
+                  </div>
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white [&>option]:text-slate-900 cursor-pointer"
+                  >
+                    <option value="">Default (Gemini Pro/Flash)</option>
+                    <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                    <option value="openai/gpt-oss-20b">Groq - openai/gpt-oss-20b</option>
+                    <option value="llama3-8b-8192">Groq - llama3-8b-8192</option>
+                    <option value="llama3-70b-8192">Groq - llama3-70b-8192</option>
+                    <option value="mixtral-8x7b-32768">Groq - mixtral-8x7b</option>
+                    <option value="google/gemini-3.1-pro-preview">OpenRouter - Gemini 3.1 Pro</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Select the specific model to be used when analyzing solutions. Ensure you have the corresponding API key configured above.</p>
+              </div>
+
+              <div className="flex justify-end border-t border-slate-200 dark:border-emerald-500/20 pt-6">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-8 py-3 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-bold flex items-center gap-2 transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                  className="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
                 >
-                  {loading ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                  Save Changes
+                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  Save AI Config
                 </button>
               </div>
             </form>

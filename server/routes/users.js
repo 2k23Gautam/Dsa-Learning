@@ -37,13 +37,15 @@ const upload = multer({
 // @access  Private
 router.post('/update-handles', auth, async (req, res) => {
   try {
-    const { leetcodeUsername, codeforcesHandle, geminiApiKey } = req.body;
+    const { leetcodeUsername, codeforcesHandle, geminiApiKey, groqApiKey, preferredAiModel } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (leetcodeUsername !== undefined) user.leetcodeUsername = leetcodeUsername;
     if (codeforcesHandle !== undefined) user.codeforcesHandle = codeforcesHandle;
     if (geminiApiKey !== undefined) user.geminiApiKey = geminiApiKey;
+    if (groqApiKey !== undefined) user.groqApiKey = groqApiKey;
+    if (preferredAiModel !== undefined) user.preferredAiModel = preferredAiModel;
     
     await user.save();
     const cleanUser = user.toObject();

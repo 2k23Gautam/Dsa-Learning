@@ -145,11 +145,12 @@ function parseAiResponse(text) {
  * Analyze a problem statement together with the user's submitted solution.
  * The result is structured for both a reasoning UI and saved revision notes.
  */
-async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = [], userApiKey = null) {
+async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = [], userApiKey = null, userGroqApiKey = null, preferredModel = null) {
   const geminiKey = userApiKey || process.env.GEMINI_API_KEY;
+  const groqKey = userGroqApiKey || process.env.GROQ_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
-  if (!geminiKey && !openRouterKey) {
-    throw new Error('Neither user Gemini API Key, GEMINI_API_KEY, nor OPENROUTER_API_KEY is configured');
+  if (!geminiKey && !openRouterKey && !groqKey) {
+    throw new Error('Neither user Gemini/Groq API Key, GEMINI_API_KEY, GROQ_API_KEY, nor OPENROUTER_API_KEY is configured');
   }
 
   const statement = cleanString(problemStatement).slice(0, 14000);
@@ -409,7 +410,7 @@ ${code || 'No solution code supplied.'}`;
 
   if (geminiKey) {
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const models = ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
+    const models = preferredModel ? [preferredModel] : ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
 
     for (const modelName of models) {
       try {
@@ -436,8 +437,49 @@ ${code || 'No solution code supplied.'}`;
     }
   }
 
+  if (groqKey) {
+    const groqModel = preferredModel || 'openai/gpt-oss-20b';
+    try {
+      console.log(`[AI] Trying Groq with model ${groqModel}...`);
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: groqModel,
+          messages: [
+            {
+              role: 'system',
+              content: "You are a precise, user-friendly DSA educator. Keep your language very simple, warm, and easy for beginners to understand. Respond in the exact format requested."
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.15,
+          max_tokens: 2048,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${groqKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const responseText = response.data?.choices?.[0]?.message?.content;
+      if (!responseText) {
+        throw new Error('Empty response text from Groq');
+      }
+
+      return parseAiResponse(responseText);
+    } catch (error) {
+      lastError = error.response?.data?.error?.message || error.message;
+      console.warn(`[AI] Groq failed:`, lastError);
+    }
+  }
+
   if (openRouterKey) {
-    const openRouterModel = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-pro-preview';
+    const openRouterModel = preferredModel || process.env.OPENROUTER_MODEL || 'google/gemini-3.1-pro-preview';
     try {
       console.log(`[AI] Trying OpenRouter model ${openRouterModel}...`);
       const response = await axios.post(

@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   leetcodeUsername: { type: String, default: "" },
   codeforcesHandle: { type: String, default: "" },
   geminiApiKey: { type: String, default: "" },
+  groqApiKey: { type: String, default: "" },
+  preferredAiModel: { type: String, default: "" },
   profileImage: { type: String, default: "" },
   leetcodeStats: { type: Object, default: null },
   platformStats: { 
