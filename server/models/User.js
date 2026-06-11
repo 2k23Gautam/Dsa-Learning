@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   codeforcesHandle: { type: String, default: "" },
   geminiApiKey: { type: String, default: "" },
   groqApiKey: { type: String, default: "" },
+  openRouterApiKey: { type: String, default: "" },
   preferredAiModel: { type: String, default: "" },
   profileImage: { type: String, default: "" },
   leetcodeStats: { type: Object, default: null },

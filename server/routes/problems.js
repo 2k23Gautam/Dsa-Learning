@@ -337,14 +337,14 @@ router.post('/fetch-statement', auth, async (req, res) => {
 // @access Private
 router.post('/ai-suggest', auth, async (req, res) => {
   try {
-    const { name, link, solutionCode, problemStatement } = req.body;
+    const { name, link, solutionCode, problemStatement, instructions } = req.body;
     const input = link || name || 'Unknown Problem';
 
     if (!solutionCode && !name && !link) {
       return res.status(400).json({ message: 'Provide at least a problem name, link, or solution code.' });
     }
 
-    console.log(`[AI Suggest] Problem: "${input}", Has statement: ${!!problemStatement}, Has code: ${!!solutionCode}`);
+    console.log(`[AI Suggest] Problem: "${input}", Has statement: ${!!problemStatement}, Has code: ${!!solutionCode}, Has instructions: ${!!instructions}`);
 
     // Fetch distinct topics and patterns for the user to help deduplicate
     const [existingTopics, existingPatterns, user] = await Promise.all([
@@ -355,8 +355,9 @@ router.post('/ai-suggest', auth, async (req, res) => {
 
     const userApiKey = user?.geminiApiKey || null;
     const groqApiKey = user?.groqApiKey || null;
+    const openRouterApiKey = user?.openRouterApiKey || null;
     const preferredModel = user?.preferredAiModel || null;
-    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns, userApiKey, groqApiKey, preferredModel);
+    const metadata = await suggestProblemMetadata(input, solutionCode, problemStatement, existingTopics, existingPatterns, userApiKey, groqApiKey, preferredModel, openRouterApiKey, instructions);
     console.log('[AI Result]', JSON.stringify(metadata, null, 2));
     res.json(metadata);
   } catch (err) {

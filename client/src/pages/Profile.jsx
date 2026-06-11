@@ -17,7 +17,18 @@ export default function Profile() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [groqKey, setGroqKey] = useState(authUser?.groqApiKey || '');
   const [showGroqKey, setShowGroqKey] = useState(false);
+  const [openRouterKey, setOpenRouterKey] = useState(authUser?.openRouterApiKey || '');
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [aiModel, setAiModel] = useState(authUser?.preferredAiModel || '');
+  const [showAllKeys, setShowAllKeys] = useState(false);
+
+  const getSelectedProvider = () => {
+    if (!aiModel) return 'gemini';
+    if (aiModel.startsWith('gemini-')) return 'gemini';
+    if (aiModel.includes('/')) return 'openrouter';
+    return 'groq';
+  };
+  const activeProvider = getSelectedProvider();
 
   const handleUpdateHandles = async (e) => {
     e.preventDefault();
@@ -34,6 +45,7 @@ export default function Profile() {
           codeforcesHandle: cfHandle,
           geminiApiKey: geminiKey,
           groqApiKey: groqKey,
+          openRouterApiKey: openRouterKey,
           preferredAiModel: aiModel,
         })
       });
@@ -210,54 +222,6 @@ export default function Profile() {
             <form onSubmit={handleUpdateHandles} className="space-y-6 relative z-10">
               <p className="text-xs text-slate-400 mb-2">Power your problem-solving with custom AI models. Provide your own API keys for unlimited usage.</p>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-emerald-500/50 transition-all">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Gemini API Key</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                    <Settings size={16} />
-                  </div>
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={geminiKey}
-                    onChange={(e) => setGeminiKey(e.target.value)}
-                    placeholder="e.g. AIzaSy..."
-                    className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="text-xs text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
-                  >
-                    {showApiKey ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2">Provides custom answering capabilities for your profile.</p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-indigo-500/50 transition-all">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Groq API Key</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-                    <Settings size={16} />
-                  </div>
-                  <input
-                    type={showGroqKey ? "text" : "password"}
-                    value={groqKey}
-                    onChange={(e) => setGroqKey(e.target.value)}
-                    placeholder="e.g. gsk_..."
-                    className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowGroqKey(!showGroqKey)}
-                    className="text-xs text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
-                  >
-                    {showGroqKey ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2">Provides Groq-powered AI capabilities.</p>
-              </div>
-
               <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-purple-500/50 transition-all">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Preferred AI Model</label>
                 <div className="flex items-center gap-3">
@@ -269,17 +233,116 @@ export default function Profile() {
                     onChange={(e) => setAiModel(e.target.value)}
                     className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white [&>option]:text-slate-900 cursor-pointer"
                   >
-                    <option value="">Default (Gemini Pro/Flash)</option>
-                    <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-                    <option value="openai/gpt-oss-20b">Groq - openai/gpt-oss-20b</option>
-                    <option value="llama3-8b-8192">Groq - llama3-8b-8192</option>
-                    <option value="llama3-70b-8192">Groq - llama3-70b-8192</option>
-                    <option value="mixtral-8x7b-32768">Groq - mixtral-8x7b</option>
-                    <option value="google/gemini-3.1-pro-preview">OpenRouter - Gemini 3.1 Pro</option>
+                    <option value="">Default (Gemini Flash)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Google SDK)</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google SDK)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Google SDK)</option>
+                    <option value="llama-3.3-70b-versatile">Groq - Llama 3.3 70B</option>
+                    <option value="llama-3.1-8b-instant">Groq - Llama 3.1 8B</option>
+                    <option value="mixtral-8x7b-32768">Groq - Mixtral 8x7B</option>
+                    <option value="google/gemini-2.5-flash">OpenRouter - Gemini 2.5 Flash</option>
+                    <option value="google/gemini-2.5-pro">OpenRouter - Gemini 2.5 Pro</option>
+                    <option value="meta-llama/llama-3.3-70b-instruct">OpenRouter - Llama 3.3 70B</option>
+                    <option value="deepseek/deepseek-chat">OpenRouter - DeepSeek V3/R1</option>
                   </select>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2">Select the specific model to be used when analyzing solutions. Ensure you have the corresponding API key configured above.</p>
+                <p className="text-[10px] text-slate-400 mt-2">Select the specific model to be used when analyzing solutions.</p>
+              </div>
+
+              {/* Conditionally render relevant API Key field based on selected model */}
+              {(activeProvider === 'gemini' || showAllKeys) && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-emerald-500/50 transition-all animate-fade-in">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                    Gemini API Key {activeProvider === 'gemini' && <span className="text-emerald-500 font-black">(Selected Provider Key)</span>}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                      <Settings size={16} />
+                    </div>
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={geminiKey}
+                      onChange={(e) => setGeminiKey(e.target.value)}
+                      placeholder="e.g. AIzaSy..."
+                      className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="text-xs text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+                    >
+                      {showApiKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Required for Google Gemini models.</p>
+                </div>
+              )}
+
+              {(activeProvider === 'groq' || showAllKeys) && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-indigo-500/50 transition-all animate-fade-in">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                    Groq API Key {activeProvider === 'groq' && <span className="text-indigo-500 font-black">(Selected Provider Key)</span>}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                      <Settings size={16} />
+                    </div>
+                    <input
+                      type={showGroqKey ? "text" : "password"}
+                      value={groqKey}
+                      onChange={(e) => setGroqKey(e.target.value)}
+                      placeholder="e.g. gsk_..."
+                      className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowGroqKey(!showGroqKey)}
+                      className="text-xs text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+                    >
+                      {showGroqKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Required for Groq models.</p>
+                </div>
+              )}
+
+              {(activeProvider === 'openrouter' || showAllKeys) && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] group focus-within:border-purple-500/50 transition-all animate-fade-in">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
+                    OpenRouter API Key {activeProvider === 'openrouter' && <span className="text-purple-500 font-black">(Selected Provider Key)</span>}
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
+                      <Settings size={16} />
+                    </div>
+                    <input
+                      type={showOpenRouterKey ? "text" : "password"}
+                      value={openRouterKey}
+                      onChange={(e) => setOpenRouterKey(e.target.value)}
+                      placeholder="e.g. sk-or-..."
+                      className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-300"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+                      className="text-xs text-slate-400 hover:text-purple-500 dark:hover:text-purple-400 transition-colors"
+                    >
+                      {showOpenRouterKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Required for OpenRouter models.</p>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-xs mt-1 px-1">
+                <span className="text-slate-400">Configure key for the selected preferred model.</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllKeys(!showAllKeys)}
+                  className="text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 font-bold transition-colors"
+                >
+                  {showAllKeys ? 'Hide other keys' : 'Show all API keys'}
+                </button>
               </div>
 
               <div className="flex justify-end border-t border-slate-200 dark:border-emerald-500/20 pt-6">

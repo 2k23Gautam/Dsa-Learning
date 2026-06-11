@@ -145,19 +145,16 @@ function parseAiResponse(text) {
  * Analyze a problem statement together with the user's submitted solution.
  * The result is structured for both a reasoning UI and saved revision notes.
  */
-async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = [], userApiKey = null, userGroqApiKey = null, preferredModel = null) {
+async function suggestProblemMetadata(problemInput, solutionCode = '', problemStatement = '', existingTopics = [], existingPatterns = [], userApiKey = null, userGroqApiKey = null, preferredModel = null, userOpenRouterApiKey = null, customInstructions = '') {
   const geminiKey = userApiKey || process.env.GEMINI_API_KEY;
   const groqKey = userGroqApiKey || process.env.GROQ_API_KEY;
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
-  if (!geminiKey && !openRouterKey && !groqKey) {
-    throw new Error('Neither user Gemini/Groq API Key, GEMINI_API_KEY, GROQ_API_KEY, nor OPENROUTER_API_KEY is configured');
-  }
+  const openRouterKey = userOpenRouterApiKey || process.env.OPENROUTER_API_KEY;
 
   const statement = cleanString(problemStatement).slice(0, 14000);
   const code = cleanString(solutionCode).slice(0, 14000);
   const identifier = cleanString(problemInput) || 'Unknown Problem';
 
-  const prompt = `You are an expert DSA educator. Write the explanation in very simple, plain English, and beginner-friendly language. Avoid overly complex jargon, and explain the intuition step-by-step as if you are teaching a beginner student. Keep the tone warm, friendly, and encouraging.
+  let prompt = `You are an expert DSA educator. Write the explanation in very simple, plain English, and beginner-friendly language. Avoid overly complex jargon, and explain the intuition step-by-step as if you are teaching a beginner student. Keep the tone warm, friendly, and encouraging.
 
 For every LeetCode/GFG problem and solution provided, generate an explanation in the following format:
 
@@ -343,7 +340,7 @@ Output:
 
 Generating all m×n values and sorting them is impossible for large constraints. Instead of asking for the kth smallest number directly, we ask a different question:
 
-"How many numbers in the multiplication table are less than or equal to X?"
+\"How many numbers in the multiplication table are less than or equal to X?\"
 
 If we can answer this efficiently, then we can binary search for the smallest value whose count reaches at least k.
 
@@ -392,9 +389,9 @@ Existing Topics in user's database: ${existingTopics.length > 0 ? existingTopics
 Existing Patterns in user's database: ${existingPatterns.length > 0 ? existingPatterns.join(', ') : 'None'}
 
 CRITICAL INSTRUCTION FOR TOPICS & PATTERNS:
-Look at the list of "Existing Topics" and "Existing Patterns" above.
+Look at the list of \"Existing Topics\" and \"Existing Patterns\" above.
 - If one of the existing topics or patterns matches the concept/idea of the problem, you MUST reuse the exact spelling/formatting of that existing topic or pattern.
-- For example, do not output "Arrays" if "Array" is already listed, or "Hash Table" if "Hash Map" is already listed. Select from the existing list to maintain database consistency.
+- For example, do not output \"Arrays\" if \"Array\" is already listed, or \"Hash Table\" if \"Hash Map\" is already listed. Select from the existing list to maintain database consistency.
 - Only suggest a completely new topic or pattern if it does not conceptually match any of the existing items.
 
 Now use the same style and formatting for the following problem and solution:
@@ -406,11 +403,51 @@ ${statement || 'Not available. Infer from the solution code.'}
 Solution:
 ${code || 'No solution code supplied.'}`;
 
+  if (customInstructions && customInstructions.trim()) {
+    prompt += `\n\nCRITICAL USER INSTRUCTIONS / PREFERENCES:
+${customInstructions.trim()}
+Please make sure to strictly follow the above user instructions/preferences in your explanation and output.`;
+  }
+
   let lastError = 'Unknown error';
 
-  if (geminiKey) {
+  // Determine provider based on preferredModel name or fall back to first available key
+  let providerToUse = null;
+  if (preferredModel) {
+    if (preferredModel.startsWith('gemini-')) {
+      providerToUse = 'gemini';
+    } else if (
+      preferredModel.startsWith('llama-') ||
+      preferredModel.startsWith('mixtral-') ||
+      preferredModel.startsWith('gemma') ||
+      preferredModel === 'llama3-8b-8192' ||
+      preferredModel === 'llama3-70b-8192' ||
+      preferredModel === 'mixtral-8x7b-32768' ||
+      preferredModel === 'openai/gpt-oss-20b'
+    ) {
+      providerToUse = 'groq';
+    } else if (preferredModel.includes('/')) {
+      providerToUse = 'openrouter';
+    }
+  }
+
+  if (!providerToUse) {
+    if (geminiKey) providerToUse = 'gemini';
+    else if (groqKey) providerToUse = 'groq';
+    else if (openRouterKey) providerToUse = 'openrouter';
+    else {
+      throw new Error('Neither Gemini Key, Groq Key, nor OpenRouter Key is configured.');
+    }
+  }
+
+  console.log(`[AI Suggest] Selected provider: ${providerToUse}, Model: ${preferredModel || 'default'}`);
+
+  if (providerToUse === 'gemini') {
+    if (!geminiKey) {
+      throw new Error('Gemini API key is not configured');
+    }
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const models = preferredModel ? [preferredModel] : ['gemini-3.5-flash', 'gemini-3.1-pro-preview'];
+    const models = preferredModel ? [preferredModel] : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
 
     for (const modelName of models) {
       try {
@@ -435,10 +472,18 @@ ${code || 'No solution code supplied.'}`;
         console.warn(`[AI] Gemini ${modelName} failed:`, lastError);
       }
     }
+    throw new Error(`Gemini failed: ${lastError}`);
   }
 
-  if (groqKey) {
-    const groqModel = preferredModel || 'openai/gpt-oss-20b';
+  if (providerToUse === 'groq') {
+    if (!groqKey) {
+      throw new Error('Groq API key is not configured');
+    }
+    let groqModel = preferredModel || 'llama-3.3-70b-versatile';
+    // Map any old models to working ones if necessary
+    if (groqModel === 'openai/gpt-oss-20b') {
+      groqModel = 'llama-3.3-70b-versatile';
+    }
     try {
       console.log(`[AI] Trying Groq with model ${groqModel}...`);
       const response = await axios.post(
@@ -475,11 +520,15 @@ ${code || 'No solution code supplied.'}`;
     } catch (error) {
       lastError = error.response?.data?.error?.message || error.message;
       console.warn(`[AI] Groq failed:`, lastError);
+      throw new Error(`Groq failed: ${lastError}`);
     }
   }
 
-  if (openRouterKey) {
-    const openRouterModel = preferredModel || process.env.OPENROUTER_MODEL || 'google/gemini-3.1-pro-preview';
+  if (providerToUse === 'openrouter') {
+    if (!openRouterKey) {
+      throw new Error('OpenRouter API key is not configured');
+    }
+    const openRouterModel = preferredModel || 'google/gemini-2.5-flash';
     try {
       console.log(`[AI] Trying OpenRouter model ${openRouterModel}...`);
       const response = await axios.post(
@@ -518,6 +567,7 @@ ${code || 'No solution code supplied.'}`;
     } catch (error) {
       lastError = error.response?.data?.error?.message || error.message;
       console.warn(`[AI] OpenRouter failed:`, lastError);
+      throw new Error(`OpenRouter failed: ${lastError}`);
     }
   }
 

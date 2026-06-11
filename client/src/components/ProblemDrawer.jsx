@@ -41,6 +41,7 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
   const [aiStage, setAiStage] = useState('');
+  const [aiInstructions, setAiInstructions] = useState('');
 
   // Statement fetching
   const [statementStatus, setStatementStatus] = useState('idle'); // idle | fetching | success | error
@@ -114,6 +115,7 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
       setStatementStatus('idle');
       setAiResult(null);
       setAiStage('');
+      setAiInstructions('');
       if (problem) {
         setFormData({ ...problem });
         setEditedCode(problem.solutionCode || '');
@@ -169,7 +171,8 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
           name: formData.name,
           link: formData.link,
           solutionCode: formData.solutionCode,
-          problemStatement: formData.problemStatement || ''
+          problemStatement: formData.problemStatement || '',
+          instructions: aiInstructions
         })
       });
 
@@ -557,6 +560,20 @@ export default function ProblemDrawer({ open, onClose, problem = null, initialTa
                           </div>
                         </div>
                       )}
+                    </div>
+                    {/* Custom AI Instructions */}
+                    <div className="mt-2.5 p-3 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/[0.05] focus-within:border-brand-500/50 transition-all">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-400 uppercase tracking-widest block mb-1">
+                        Custom AI Instructions (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={aiInstructions}
+                        onChange={e => setAiInstructions(e.target.value)}
+                        placeholder="e.g., Explain DP state transitions, Focus on O(1) space, Write explanations in Java..."
+                        className="w-full bg-transparent border-none outline-none text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400/60"
+                        disabled={isAiLoading}
+                      />
                     </div>
                   </div>
 
